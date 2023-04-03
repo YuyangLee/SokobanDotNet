@@ -18,7 +18,17 @@ namespace SokobanDotNet
 
     enum MoveResult
     {
-        Success = 1, Failed = 0
+        FailedMove,
+        FailedPush,
+        Invalid,
+        SuccessfulMove,
+        SuccessfulPush
+    }
+
+    enum GameStatus
+    {
+        OnGoing,
+        End
     }
 
     internal class Game
@@ -26,17 +36,21 @@ namespace SokobanDotNet
         /// <summary>
         /// Width of the map
         /// </summary>
-        public int Width { get; }
+        public int Width;
 
         /// <summary>
         /// Height of the map
         /// </summary>
-        public int Height { get; }
+        public int Height;
+
+        public List<Tuple<int, int>> HoleLocations = new();
 
         /// <summary>
         /// Game map.
         /// </summary>
-        private List<List<TileType>> Map;
+        private List<List<TileType>> Map = new();
+
+        string[]? _MapData;
 
         /// <summary>
         /// Player position.
@@ -48,44 +62,29 @@ namespace SokobanDotNet
         /// </summary>
         /// <param name="game"></param>
         /// <returns></returns>
-        private static bool IsSolvable(Game game)
-        {
-            return true;
-        }
+        // TODO: Implement this
+        public static bool IsSolvable(Game game) => true;
 
-        /// <summary>
-        /// Instantiate a game with specified tiles.
-        /// </summary>
-        /// <param name="tiles">Specified tiles</param>
-        public Game(List<List<TileType>> tiles)
-        {
-            Map = tiles;
-            Height = tiles.Count;
-            Width = tiles[0].Count;
-        }
+        private GameStatus Status = GameStatus.OnGoing;
 
-        /// <summary>
-        /// Load the game map from a file.
-        /// </summary>
-        /// <param name="gameMapPath">File path</param>
-        public static Game LoadGameFromFile(string gameMapPath)
-        {
-            if (!File.Exists(gameMapPath))
-            {
-                throw new Exception($"File {gameMapPath} doesn't exist.");
-            }
-            // Read from TXT file
-            string[] mapData = File.ReadAllLines(gameMapPath);
+        private readonly string Instruction = "\n==================== TILES ====================\n# - Block       O - Hole\nx - Box         X - Box in the Hole\ni - Player      I - Player on the Hole\n=================== CONTROL ===================\nArrow - Move    Q - quit  R - Reset  S - Search\n===============================================\n";
 
+        public void ParseMapFromStrings(string[]? mapData)
+        {
+            if (mapData is null) return;
             if (mapData.Length < 3)
             {
                 throw new Exception("There must be at least 3 rows in the map!");
             }
 
-            int Height = mapData.Length;
-            int Width = mapData[0].Length;
+            Height = mapData.Length;
+            Width = mapData[0].Length;
 
-            int PlayerX = -1, PlayerY = -1;
+            PlayerRow = -1;
+            PlayerCol = -1;
+            int NumBoxes = 0, NumHoles = 0;
+
+            HoleLocations = new();
 
             for (int h = 0; h < Height; h++)
             {
@@ -97,17 +96,26 @@ namespace SokobanDotNet
                 {
                     if (mapData[h][w] == '0' + (int)TileType.Player)
                     {
-                        if (PlayerX != -1 || PlayerY != -1)
+                        if (PlayerCol != -1 || PlayerRow != -1)
                         {
                             throw new Exception("There can only be one player in the map!");
                         }
-                        PlayerX = w;
-                        PlayerY = h;
+                        PlayerCol = w;
+                        PlayerRow = h;
+                    }
+                    if (mapData[h][w] == '0' + (int)TileType.Box) NumBoxes ++;
+                    if (mapData[h][w] == '0' + (int)TileType.Hole)
+                    {
+                        NumHoles++;
+                        HoleLocations.Add(new(h, w));
                     }
                 }
             }
 
-            List<List<TileType>> map = new();
+            if (NumBoxes != NumHoles) throw new Exception($"There must be equal amount of box(es) and hole(s)!");
+            if (NumBoxes <= 0) throw new Exception($"There must be at least one box and a hole");
+
+            Map = new();
 
             for (int h = 0; h < Height; h++)
             {
@@ -116,17 +124,15 @@ namespace SokobanDotNet
                 {
                     row.Add((TileType)mapData[h][w] - '0');
                 }
-                map.Add(row);
+                Map.Add(row);
             }
 
-            Game game = new(map) { PlayerCol = PlayerX, PlayerRow = PlayerY };
+            SetBackup(mapData);
+        }
 
-            if (!Game.IsSolvable(game))
-            {
-                throw new Exception("The game is not solvable!");
-            }
-
-            return game;
+        private void SetBackup(string[] mapData)
+        {
+            _MapData = mapData;
         }
 
         public override string? ToString()
@@ -151,9 +157,13 @@ namespace SokobanDotNet
                             toString += "x";
                             break;
                         case TileType.Player:
+                            toString += "i";
+                            break;
+                        case TileType.Player | TileType.Hole:
                             toString += "I";
                             break;
-                        default:
+                        case TileType.Box | TileType.Hole:
+                            toString += "X";
                             break;
                     }
                 }
@@ -162,40 +172,63 @@ namespace SokobanDotNet
             return toString;
         }
 
+        private void Reset()
+        {
+            this.ParseMapFromStrings(this._MapData);
+            this.Status = GameStatus.OnGoing;
+        }
+
+        private bool IsOutside(int row, int col) => (row < 0 || row >= Height || col < 0 || col >= Width);
+
         private MoveResult Move(int targetDeltaRow, int targetDeltaCol)
         {
             int targetRow = PlayerRow + targetDeltaRow;
             int targetCol = PlayerCol + targetDeltaCol;
-            switch (Map[targetRow][targetCol])
+
+            if (IsOutside(targetRow, targetCol))
             {
-                case TileType.Ground:
-                case TileType.Hole:
-                    Map[PlayerRow][PlayerCol] &= ~TileType.Player;
-                    Map[targetRow][targetCol] |= TileType.Player;
-                    PlayerRow = targetRow;
-                    PlayerCol = targetCol;
-                    return MoveResult.Success;
-                case TileType.Blocked:
-                    return MoveResult.Failed;
-                case TileType.Box:
-                    int boxTargetRow = targetRow + targetDeltaRow;
-                    int boxTargetCol = targetCol + targetDeltaCol;
-                    if (Map[boxTargetRow][boxTargetCol] == TileType.Blocked || Map[boxTargetRow][boxTargetCol] == TileType.Box)
-                    {
-                        return MoveResult.Failed;
-                    }
-                    Map[boxTargetRow][boxTargetCol] |= TileType.Box;
-                    Map[targetRow][targetCol] &= ~TileType.Box;
-                    Map[targetRow][targetCol] |= TileType.Player;
-                    Map[PlayerRow][PlayerCol] &= ~TileType.Player;
-                    PlayerRow = targetRow;
-                    PlayerCol = targetCol;
-                    return MoveResult.Success;
-                default: return MoveResult.Failed;
+                return MoveResult.Invalid;
+            }
+
+            if ((Map[targetRow][targetCol] == TileType.Ground) || (Map[targetRow][targetCol] == TileType.Hole))
+            {
+                Map[PlayerRow][PlayerCol] &= ~TileType.Player;
+                Map[targetRow][targetCol] |= TileType.Player;
+                PlayerRow = targetRow;
+                PlayerCol = targetCol;
+                return MoveResult.SuccessfulMove;
+            }
+            else if (Map[targetRow][targetCol] == TileType.Blocked)
+            {
+                return MoveResult.FailedMove;
+            }
+            else if ((Map[targetRow][targetCol] & TileType.Box) > 0)
+            {
+                int boxTargetRow = targetRow + targetDeltaRow;
+                int boxTargetCol = targetCol + targetDeltaCol;
+                if (IsOutside(boxTargetRow, boxTargetCol))
+                {
+                    return MoveResult.FailedPush;
+                }
+                if (((Map[boxTargetRow][boxTargetCol] & TileType.Blocked) | (Map[boxTargetRow][boxTargetCol] & TileType.Box)) > 0)
+                {
+                    return MoveResult.FailedMove;
+                }
+                Map[boxTargetRow][boxTargetCol] |= TileType.Box;
+                Map[targetRow][targetCol] &= ~TileType.Box;
+                Map[targetRow][targetCol] |= TileType.Player;
+                Map[PlayerRow][PlayerCol] &= ~TileType.Player;
+                PlayerRow = targetRow;
+                PlayerCol = targetCol;
+                return MoveResult.SuccessfulPush;
+            }
+            else
+            {
+                return MoveResult.FailedMove;
             }
         }
 
-        private void HandlePlayerInput(ConsoleKeyInfo key)
+        private string HandlePlayerInput(ConsoleKeyInfo key)
         {
             int targetDeltaRow, targetDeltaCol;
             switch (key.Key)
@@ -216,18 +249,55 @@ namespace SokobanDotNet
                     targetDeltaRow = 0;
                     targetDeltaCol = 1;
                     break;
-                default: return;
+                case ConsoleKey.R:
+                    this.Reset();
+                    return "Reset the game.";
+                case ConsoleKey.S:
+                    return "Search for a solution...";
+                case ConsoleKey.Q:
+                    this.Status = GameStatus.End;
+                    return "Quitted the game.";
+                default: return "";
             }
-            Move(targetDeltaRow, targetDeltaCol);
+            MoveResult result = Move(targetDeltaRow, targetDeltaCol);
+
+            if (result == MoveResult.SuccessfulPush)
+            {
+                if (CheckWin())
+                {
+                    this.Status = GameStatus.End;
+                    return "You win!";
+                }
+            }
+            return "";
         }
+
+        private bool CheckWin()
+        {
+            foreach(var location in HoleLocations)
+            {
+                if (Map[location.Item1][location.Item2] != (TileType.Box | TileType.Hole)) return false;
+            }
+            return true;
+        }
+
         public void Run()
         {
+            string returnedString = "";
             while (true)
             {
                 Console.Clear();
+                Console.WriteLine(this.Instruction);
                 Console.WriteLine(this.ToString());
+                Console.WriteLine(returnedString);
+
                 var PlayerInput = Console.ReadKey(true);
-                HandlePlayerInput(PlayerInput);
+                returnedString = HandlePlayerInput(PlayerInput);
+
+                if (this.Status == GameStatus.End)
+                {
+                    return;
+                }
             }
         }
     }
