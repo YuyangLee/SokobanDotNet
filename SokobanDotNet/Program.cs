@@ -2,10 +2,12 @@
 
 try
 {
-    Game game = Game.LoadGameFromFile(@"E:/Dev/SokobanDotNet/SokobanDotNet/Data/Maps/Basic.txt");
+    Console.WriteLine("Load from file: ");
+    string gameFilePath = Console.ReadLine();
+    Game game = Game.LoadGameFromFile(gameFilePath);
     string? gameString = game.ToString();
 
-    Console.WriteLine(gameString);
+    game.Run();
 }
 catch (Exception ex)
 {
