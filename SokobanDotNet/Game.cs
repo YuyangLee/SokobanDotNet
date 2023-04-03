@@ -16,6 +16,14 @@ namespace SokobanDotNet
         Player = 8
     }
 
+    enum PlayerAction
+    {
+        Left,
+        Right,
+        Up,
+        Down
+    }
+
     enum MoveResult
     {
         FailedMove,

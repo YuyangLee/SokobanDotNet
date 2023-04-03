@@ -6,7 +6,9 @@
       <Pad Id="ProjectPad">
         <State name="__root__">
           <Node name="SokobanDotNet" expanded="True">
-            <Node name="SokobanDotNet" selected="True" />
+            <Node name="SokobanDotNet" expanded="True">
+              <Node name="Action.cs" selected="True" />
+            </Node>
           </Node>
         </State>
       </Pad>
