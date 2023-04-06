@@ -14,12 +14,17 @@ namespace SokobanDotNet
         public GameSolver(SokobanGame game)
 		{
 			BaseGame = new(game);
-            DistIndexPermutations = Utils.Permutate(game.BoxLocations.Count);
+            DistIndexPermutations = Utils.Permute(game.BoxLocations.Count);
 			SearchList = new();
 			AppendToSearchList(BaseGame);
         }
 
-		private void AppendToSearchList(SokobanGame game) => SearchList.Enqueue(game, TargetManhattanDistance(ref game) + game.StepsCount);
+		private void AppendToSearchList(SokobanGame game)
+		{
+			int heuristicValue = TargetManhattanDistance(ref game) + game.StepsCount;
+			Console.WriteLine("Current h = " + heuristicValue.ToString() + "Current step = " + game.StepsCount.ToString());
+            SearchList.Enqueue(game, heuristicValue);
+        }
 
         public int TargetManhattanDistance(ref SokobanGame game)
 		{
