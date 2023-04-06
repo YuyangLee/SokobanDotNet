@@ -24,17 +24,22 @@ namespace SokobanDotNet
         Down
     }
 
+    [Flags]
     enum MoveResult
     {
-        FailedMove,
-        FailedPush,
-        Invalid,
-        Success
+        Invalid = 0,
+        FailedMove = 1,
+        FailedPush = 2,
+        Failed = 3,
+        SuccessMove = 4,
+        SuccessPush = 8,
+        Success = 12
     }
 
     enum GameStatus
     {
         OnGoing,
+        Stuck,
         End
     }
 
@@ -54,7 +59,7 @@ namespace SokobanDotNet
         private List<Tuple<int, int>> _BoxLocations = new();
 
         public List<Tuple<int, int>> HoleLocations { get => _HoleLocations; }
-        public List<Tuple<int, int>> BoxLocations { get => _HoleLocations; }
+        public List<Tuple<int, int>> BoxLocations { get => _BoxLocations; }
 
         SokobanGame? ParentGame = null;
 
@@ -88,7 +93,8 @@ namespace SokobanDotNet
 
         private GameStatus Status = GameStatus.OnGoing;
 
-        private readonly string Instruction = "\n==================== TILES ====================\n# - Block       O - Hole\nx - Box         X - Box in the Hole\ni - Player      I - Player on the Hole\n=================== CONTROL ===================\nArrow - Move    Q - quit  R - Reset  S - Search\n===============================================\n";
+        private string Instruction = "=================== CONTROL ===================\nArrow - Move    Q - quit  R - Reset  S - Search\n===============================================\n";
+        //private const string Instruction = "==================== TILES ====================\n# - Block       O - Hole\nx - Box         X - Box in the Hole\ni - Player      I - Player on the Hole\n=================== CONTROL ===================\nArrow - Move    Q - quit  R - Reset  S - Search\n===============================================\n";
 
         public bool NotInChain(SokobanGame game)
         {
@@ -103,7 +109,7 @@ namespace SokobanDotNet
             foreach(var action in new [] { PlayerAction.Up, PlayerAction.Down, PlayerAction.Left, PlayerAction.Right })
             {
                 SokobanGame movedGame = this.Birth();
-                if (movedGame.Move(action) == MoveResult.Success && this.NotInChain(movedGame)) possibleGames.Add(movedGame);
+                if (movedGame.Move(action) == MoveResult.SuccessMove && this.NotInChain(movedGame)) possibleGames.Add(movedGame);
             }
             return possibleGames;
         }
@@ -120,6 +126,7 @@ namespace SokobanDotNet
             PlayerCol = -1;
             int NumBoxes = 0, NumHoles = 0;
 
+            _BoxLocations = new();
             _HoleLocations = new();
 
             for (int h = 0; h < Height; h++)
@@ -149,6 +156,16 @@ namespace SokobanDotNet
                 }
             }
 
+            for (int h = 0; h < Height; h++)
+            {
+                if ((mapData[h][0] != '0' + (int)TileType.Blocked) || (mapData[h][Width - 1]) != '0' + (int)TileType.Blocked) throw new Exception("The Border must be blocked!");
+            }
+
+            for (int w = 0; w < Width; w++)
+            {
+                if ((mapData[0][w] != '0' + (int)TileType.Blocked) || (mapData[Height-1][w]) != '0' + (int)TileType.Blocked) throw new Exception("The Border must be blocked!");
+            }
+
             if (NumBoxes != NumHoles) throw new Exception($"There must be equal amount of box(es) and hole(s)!");
             if (NumBoxes <= 0) throw new Exception($"There must be at least one box and a hole");
 
@@ -176,25 +193,25 @@ namespace SokobanDotNet
                     switch (tile)
                     {
                         case TileType.Ground:
-                            toString += " ";
+                            toString += "  ";
                             break;
                         case TileType.Blocked:
-                            toString += "#";
+                            toString += "墙";
                             break;
                         case TileType.Hole:
-                            toString += "O";
+                            toString += "口";
                             break;
                         case TileType.Box:
-                            toString += "x";
+                            toString += "ｏ";
                             break;
                         case TileType.Player:
-                            toString += "i";
+                            toString += "你";
                             break;
                         case TileType.Player | TileType.Hole:
-                            toString += "I";
+                            toString += "你";
                             break;
                         case TileType.Box | TileType.Hole:
-                            toString += "X";
+                            toString += "回";
                             break;
                     }
                 }
@@ -251,17 +268,14 @@ namespace SokobanDotNet
                 Map[targetRow][targetCol] |= TileType.Player;
                 PlayerRow = targetRow;
                 PlayerCol = targetCol;
-                return MoveResult.Success;
+                return MoveResult.SuccessMove;
             }
             else if (Map[targetRow][targetCol] == TileType.Blocked) return MoveResult.FailedMove;
             else if ((Map[targetRow][targetCol] & TileType.Box) > 0)
             {
                 int boxTargetRow = targetRow + targetDeltaRow;
                 int boxTargetCol = targetCol + targetDeltaCol;
-                if (IsOutside(boxTargetRow, boxTargetCol))
-                {
-                    return MoveResult.FailedPush;
-                }
+                if (IsOutside(boxTargetRow, boxTargetCol)) return MoveResult.FailedPush;
                 if (((Map[boxTargetRow][boxTargetCol] & TileType.Blocked) | (Map[boxTargetRow][boxTargetCol] & TileType.Box)) > 0) return MoveResult.FailedMove;
 
                 int i;
@@ -274,13 +288,14 @@ namespace SokobanDotNet
                     }
                 }
                 if (i == _BoxLocations.Count) throw new Exception("Fatal error!");
+
                 Map[boxTargetRow][boxTargetCol] |= TileType.Box;
                 Map[targetRow][targetCol] &= ~TileType.Box;
                 Map[targetRow][targetCol] |= TileType.Player;
                 Map[PlayerRow][PlayerCol] &= ~TileType.Player;
                 PlayerRow = targetRow;
                 PlayerCol = targetCol;
-                return MoveResult.Success;
+                return MoveResult.SuccessPush;
             }
             else return MoveResult.FailedMove;
         }
@@ -315,13 +330,20 @@ namespace SokobanDotNet
 
             MoveResult result = Move(action);
 
-            if (result == MoveResult.Success)
+            if ((result & MoveResult.Success) > 0)
             {
                 if (CheckWin())
                 {
                     this.Status = GameStatus.End;
                     return "You win!";
                 }
+                if (((result & MoveResult.Success) > 0) && this.HasStuck())
+                {
+                    this.Status = GameStatus.Stuck;
+                    return "Got stuck!";
+                }
+
+                else this.Status = GameStatus.OnGoing;
             }
             return "";
         }
@@ -333,6 +355,20 @@ namespace SokobanDotNet
                 if (Map[location.Item1][location.Item2] != (TileType.Box | TileType.Hole)) return false;
             }
             return true;
+        }
+
+        private bool HasStuck()
+        {
+            // In a valid map, the box will not be on the boarder, so no boarder check is needed.
+            foreach (var location in _BoxLocations)
+            {
+                if (Map[location.Item1][location.Item2] == (TileType.Hole | TileType.Box)) continue;
+                if (((Map[location.Item1    ][location.Item2 + 1] & TileType.Blocked) > 0) && ((Map[location.Item1 + 1][location.Item2    ] & TileType.Blocked) > 0)) return true;
+                if (((Map[location.Item1 + 1][location.Item2    ] & TileType.Blocked) > 0) && ((Map[location.Item1    ][location.Item2 - 1] & TileType.Blocked) > 0)) return true;
+                if (((Map[location.Item1    ][location.Item2 - 1] & TileType.Blocked) > 0) && ((Map[location.Item1 - 1][location.Item2    ] & TileType.Blocked) > 0)) return true;
+                if (((Map[location.Item1 - 1][location.Item2    ] & TileType.Blocked) > 0) && ((Map[location.Item1    ][location.Item2 + 1] & TileType.Blocked) > 0)) return true;
+            }
+            return false;
         }
 
         public void Run()

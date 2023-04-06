@@ -13,7 +13,7 @@ namespace SokobanDotNet
         }
 		public static int TargetManhattanDistance(SokobanGame game)
 		{
-			// TODO: Minimal Manhhatan distance
+			// TODO: Minimal Manhhatan distance across all pairs
 			var manhattanDists = game.HoleLocations.Zip(
 				game.BoxLocations,
                 (holeLoc, boxLoc) => Math.Abs(holeLoc.Item1 - boxLoc.Item1) + Math.Abs(holeLoc.Item1 - boxLoc.Item1)
