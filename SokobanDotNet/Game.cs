@@ -16,31 +16,16 @@ namespace SokobanDotNet
         Player = 8
     }
 
-    enum PlayerAction
-    {
-        Left,
-        Right,
-        Up,
-        Down
-    }
+    enum PlayerAction { Undefined, Left, Right, Up, Down }
+
+    enum GameStatus { OnGoing, Stuck, End }
 
     [Flags]
     enum MoveResult
     {
         Invalid = 0,
-        FailedMove = 1,
-        FailedPush = 2,
-        Failed = 3,
-        SuccessMove = 4,
-        SuccessPush = 8,
-        Success = 12
-    }
-
-    enum GameStatus
-    {
-        OnGoing,
-        Stuck,
-        End
+        FailedMove = 1, FailedPush = 2, Failed = 3,
+        SuccessfulMove = 4, SuccessPush = 8, Success = 12
     }
 
     internal class SokobanGame : ICloneable
@@ -61,7 +46,9 @@ namespace SokobanDotNet
         public List<Tuple<int, int>> HoleLocations { get => _HoleLocations; }
         public List<Tuple<int, int>> BoxLocations { get => _BoxLocations; }
 
-        SokobanGame? ParentGame = null;
+        private SokobanGame? ParentGame = null;
+
+        public int StepsCount = 0;
 
         /// <summary>
         /// Game map.
@@ -69,6 +56,8 @@ namespace SokobanDotNet
         private List<List<TileType>> Map = new();
 
         private string[]? _MapData;
+
+        private PlayerAction LastPlayerAction = PlayerAction.Undefined;
 
         public static Dictionary<PlayerAction, Tuple<int, int>> ActionToDeltas = new()
         {
@@ -93,14 +82,16 @@ namespace SokobanDotNet
 
         private GameStatus Status = GameStatus.OnGoing;
 
-        private string Instruction = "=================== CONTROL ===================\nArrow - Move    Q - quit  R - Reset  S - Search\n===============================================\n";
-        //private const string Instruction = "==================== TILES ====================\n# - Block       O - Hole\nx - Box         X - Box in the Hole\ni - Player      I - Player on the Hole\n=================== CONTROL ===================\nArrow - Move    Q - quit  R - Reset  S - Search\n===============================================\n";
+        private string Instruction = "=================== CONTROL ===================\n" +
+                                     " Arrow - Move  Q - quit  R - Reset  S - Search \n" +
+                                     "================= INSTRUCTION =================\n" +
+                                     "  Push the stones \"o\" into the holes \"口\"! \n" +
+                                     "===============================================\n";
 
         public bool NotInChain(SokobanGame game)
         {
-            if (this == game) return true;
-            if (this.ParentGame is not null) return this.ParentGame.NotInChain(game);
-            else return false;
+            if (this == game) return false;
+            return this.ParentGame is null ? true : this.ParentGame.NotInChain(game);
         }
 
         public List<SokobanGame> ExecutePossibleActions()
@@ -109,7 +100,12 @@ namespace SokobanDotNet
             foreach(var action in new [] { PlayerAction.Up, PlayerAction.Down, PlayerAction.Left, PlayerAction.Right })
             {
                 SokobanGame movedGame = this.Birth();
-                if (movedGame.Move(action) == MoveResult.SuccessMove && this.NotInChain(movedGame)) possibleGames.Add(movedGame);
+                if (((movedGame.Move(action) & MoveResult.Success) > 0)
+                    && this.NotInChain(movedGame)
+                    && !movedGame.HasStuck())
+                {
+                    possibleGames.Add(movedGame);
+                }
             }
             return possibleGames;
         }
@@ -227,6 +223,7 @@ namespace SokobanDotNet
         {
             this.ParseMapFromStrings(this._MapData);
             this.Status = GameStatus.OnGoing;
+            this.StepsCount = 0;
         }
 
         /// <summary>
@@ -246,6 +243,71 @@ namespace SokobanDotNet
         /// <returns></returns>
         public static bool IsOutSideGame(SokobanGame game, int row, int col) => (row < 0 || row >= game.Height || col < 0 || col >= game.Width);
         
+        public MoveResult Attempt(PlayerAction action)
+        {
+            int targetDeltaRow = ActionToDeltas[action].Item1;
+            int targetDeltaCol = ActionToDeltas[action].Item2;
+
+            int targetRow = PlayerRow + targetDeltaRow;
+            int targetCol = PlayerCol + targetDeltaCol;
+
+            if (IsOutside(targetRow, targetCol)) return MoveResult.Invalid;
+
+            if ((Map[targetRow][targetCol] == TileType.Ground) || (Map[targetRow][targetCol] == TileType.Hole)) return MoveResult.SuccessfulMove;
+            else if (Map[targetRow][targetCol] == TileType.Blocked) return MoveResult.FailedMove;
+            else if ((Map[targetRow][targetCol] & TileType.Box) > 0)
+            {
+                int boxTargetRow = targetRow + targetDeltaRow;
+                int boxTargetCol = targetCol + targetDeltaCol;
+                if (IsOutside(boxTargetRow, boxTargetCol)) return MoveResult.FailedPush;
+                if (((Map[boxTargetRow][boxTargetCol] & TileType.Blocked) | (Map[boxTargetRow][boxTargetCol] & TileType.Box)) > 0) return MoveResult.FailedMove;
+
+                return MoveResult.SuccessPush;
+            }
+            else return MoveResult.FailedMove;
+        }
+        
+        public void Execute(PlayerAction action, MoveResult result)
+        {
+            int targetDeltaRow = ActionToDeltas[action].Item1;
+            int targetDeltaCol = ActionToDeltas[action].Item2;
+
+            int targetRow = PlayerRow + targetDeltaRow;
+            int targetCol = PlayerCol + targetDeltaCol;
+
+            switch (result)
+            {
+                case MoveResult.SuccessfulMove:
+                    Map[PlayerRow][PlayerCol] &= ~TileType.Player;
+                    Map[targetRow][targetCol] |= TileType.Player;
+                    PlayerRow = targetRow;
+                    PlayerCol = targetCol;
+                    break;
+                case MoveResult.SuccessPush:
+                    int boxTargetRow = targetRow + targetDeltaRow;
+                    int boxTargetCol = targetCol + targetDeltaCol;
+
+                    int i;
+                    for (i = 0; i < _BoxLocations.Count; i++)
+                    {
+                        if ((_BoxLocations[i].Item1 == targetRow) && (_BoxLocations[i].Item2 == targetCol))
+                        {
+                            _BoxLocations[i] = new(boxTargetRow, boxTargetCol);
+                            break;
+                        }
+                    }
+                    if (i == _BoxLocations.Count) throw new Exception("Fatal error!");
+
+                    Map[boxTargetRow][boxTargetCol] |= TileType.Box;
+                    Map[targetRow][targetCol] &= ~TileType.Box;
+                    Map[targetRow][targetCol] |= TileType.Player;
+                    Map[PlayerRow][PlayerCol] &= ~TileType.Player;
+                    PlayerRow = targetRow;
+                    PlayerCol = targetCol;
+                    break;
+            }
+        }
+
         /// <summary>
         /// Execute an action
         /// </summary>
@@ -254,6 +316,7 @@ namespace SokobanDotNet
         /// <exception cref="Exception"></exception>
         private MoveResult Move(PlayerAction action)
         {
+
             int targetDeltaRow = ActionToDeltas[action].Item1;
             int targetDeltaCol = ActionToDeltas[action].Item2;
 
@@ -268,7 +331,8 @@ namespace SokobanDotNet
                 Map[targetRow][targetCol] |= TileType.Player;
                 PlayerRow = targetRow;
                 PlayerCol = targetCol;
-                return MoveResult.SuccessMove;
+                StepsCount++;
+                return MoveResult.SuccessfulMove;
             }
             else if (Map[targetRow][targetCol] == TileType.Blocked) return MoveResult.FailedMove;
             else if ((Map[targetRow][targetCol] & TileType.Box) > 0)
@@ -295,10 +359,22 @@ namespace SokobanDotNet
                 Map[PlayerRow][PlayerCol] &= ~TileType.Player;
                 PlayerRow = targetRow;
                 PlayerCol = targetCol;
+                StepsCount++;
+
                 return MoveResult.SuccessPush;
             }
             else return MoveResult.FailedMove;
         }
+
+        public List<PlayerAction> GetActionChain()
+        {
+            if (this.ParentGame is null) return new List<PlayerAction>() { LastPlayerAction };
+            var actionChain = this.ParentGame.GetActionChain();
+            actionChain.Add(this.LastPlayerAction);
+            return actionChain;
+        }
+
+        private List<PlayerAction> Solve() => new GameSolver(this).SolveGame();
 
         private string HandlePlayerInput(ConsoleKeyInfo key)
         {
@@ -321,7 +397,11 @@ namespace SokobanDotNet
                     this.Reset();
                     return "Reset the game.";
                 case ConsoleKey.S:
-                    return "Search for a solution...";
+                    var actionChain = this.Solve();
+                    if (actionChain.Count == 0) return "Found no solution.";
+
+                    foreach (var solvedAction in actionChain) this.Move(solvedAction);
+                    return "Found a solution with " + actionChain.Count.ToString() + " step(s).";
                 case ConsoleKey.Q:
                     this.Status = GameStatus.End;
                     return "Quitted the game.";
@@ -348,7 +428,7 @@ namespace SokobanDotNet
             return "";
         }
 
-        private bool CheckWin()
+        public bool CheckWin()
         {
             foreach(var location in HoleLocations)
             {
@@ -379,6 +459,7 @@ namespace SokobanDotNet
                 Console.Clear();
                 Console.WriteLine(this.Instruction);
                 Console.WriteLine(this.ToString());
+                Console.WriteLine("Executed steps: " + this.StepsCount.ToString());
                 Console.WriteLine(returnedString);
                 if (this.Status == GameStatus.End) return;
 
