@@ -3,16 +3,26 @@ namespace SokobanDotNet
 {
 	internal class GameSolver
 	{
-		public static int TargetManhattanDistance(Game game)
+		private static bool IsMovable(SokobanGame game, int queryRow, int QueryCol)
 		{
-			int distance = 0;
+			if (SokobanGame.IsOutSideGame(game, queryRow, QueryCol)) return false;
 
-			// TODO: Implement distance computing
+            // TODO: Implement this.
+            return true;
 
-			return distance;
+        }
+		public static int TargetManhattanDistance(SokobanGame game)
+		{
+			// TODO: Minimal Manhhatan distance
+			var manhattanDists = game.HoleLocations.Zip(
+				game.BoxLocations,
+                (holeLoc, boxLoc) => Math.Abs(holeLoc.Item1 - boxLoc.Item1) + Math.Abs(holeLoc.Item1 - boxLoc.Item1)
+            );
+
+			return manhattanDists.Sum();
 		}
 
-		public static List<PlayerAction> SolveGame(Game game)
+		public static List<PlayerAction> SolveGame(SokobanGame game)
 		{
 			List<PlayerAction> solutionActions = new();
 

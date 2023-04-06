@@ -1,22 +1,24 @@
-﻿<Properties StartupConfiguration="{BE9F8263-28C3-4A2B-A352-D1C68FA50D16}|Default">
-  <MonoDevelop.Ide.ItemProperties.SokobanDotNet PreferredExecutionTarget="MonoDevelop.Default" />
+﻿<Properties StartupConfiguration="{BE9F8263-28C3-4A2B-A352-D1C68FA50D16}|Default" GitUserInfo="UsingGIT">
+  <MonoDevelop.Ide.DebuggingService.Breakpoints />
   <MultiItemStartupConfigurations />
-  <MonoDevelop.Ide.Workbench>
+  <MonoDevelop.Ide.ItemProperties.SokobanDotNet PreferredExecutionTarget="MonoDevelop.Default" />
+  <MonoDevelop.Ide.DebuggingService.PinnedWatches />
+  <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug" />
+  <MonoDevelop.Ide.Workbench ActiveDocument="SokobanDotNet/Game.cs">
+    <Files>
+      <File FileName="SokobanDotNet/Solver.cs" Line="25" Column="57" />
+      <File FileName="SokobanDotNet/Game.cs" Line="130" Column="18" />
+    </Files>
     <Pads>
       <Pad Id="ProjectPad">
         <State name="__root__">
           <Node name="SokobanDotNet" expanded="True">
             <Node name="SokobanDotNet" expanded="True">
-              <Node name="Action.cs" selected="True" />
+              <Node name="Game.cs" selected="True" />
             </Node>
           </Node>
         </State>
       </Pad>
     </Pads>
   </MonoDevelop.Ide.Workbench>
-  <MonoDevelop.Ide.DebuggingService.PinnedWatches />
-  <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug" />
-  <MonoDevelop.Ide.DebuggingService.Breakpoints>
-    <BreakpointStore />
-  </MonoDevelop.Ide.DebuggingService.Breakpoints>
 </Properties>
