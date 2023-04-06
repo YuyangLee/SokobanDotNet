@@ -132,10 +132,7 @@ namespace SokobanDotNet
                 {
                     if (mapData[h][w] == '0' + (int)TileType.Player)
                     {
-                        if (PlayerCol != -1 || PlayerRow != -1)
-                        {
-                            throw new Exception("There can only be one player in the map!");
-                        }
+                        if (PlayerCol != -1 || PlayerRow != -1) throw new Exception("There can only be one player in the map!");
                         PlayerCol = w;
                         PlayerRow = h;
                     }
@@ -256,10 +253,7 @@ namespace SokobanDotNet
                 PlayerCol = targetCol;
                 return MoveResult.Success;
             }
-            else if (Map[targetRow][targetCol] == TileType.Blocked)
-            {
-                return MoveResult.FailedMove;
-            }
+            else if (Map[targetRow][targetCol] == TileType.Blocked) return MoveResult.FailedMove;
             else if ((Map[targetRow][targetCol] & TileType.Box) > 0)
             {
                 int boxTargetRow = targetRow + targetDeltaRow;
@@ -268,10 +262,7 @@ namespace SokobanDotNet
                 {
                     return MoveResult.FailedPush;
                 }
-                if (((Map[boxTargetRow][boxTargetCol] & TileType.Blocked) | (Map[boxTargetRow][boxTargetCol] & TileType.Box)) > 0)
-                {
-                    return MoveResult.FailedMove;
-                }
+                if (((Map[boxTargetRow][boxTargetCol] & TileType.Blocked) | (Map[boxTargetRow][boxTargetCol] & TileType.Box)) > 0) return MoveResult.FailedMove;
 
                 int i;
                 for (i = 0; i < _BoxLocations.Count; i++)
@@ -291,10 +282,7 @@ namespace SokobanDotNet
                 PlayerCol = targetCol;
                 return MoveResult.Success;
             }
-            else
-            {
-                return MoveResult.FailedMove;
-            }
+            else return MoveResult.FailedMove;
         }
 
         private string HandlePlayerInput(ConsoleKeyInfo key)
@@ -356,14 +344,10 @@ namespace SokobanDotNet
                 Console.WriteLine(this.Instruction);
                 Console.WriteLine(this.ToString());
                 Console.WriteLine(returnedString);
+                if (this.Status == GameStatus.End) return;
 
                 var PlayerInput = Console.ReadKey(true);
                 returnedString = HandlePlayerInput(PlayerInput);
-
-                if (this.Status == GameStatus.End)
-                {
-                    return;
-                }
             }
         }
 

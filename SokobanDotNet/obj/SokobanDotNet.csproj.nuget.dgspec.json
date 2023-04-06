@@ -1,26 +1,32 @@
 {
   "format": 1,
   "restore": {
-    "/Users/aiden/dev/SokobanDotNet/SokobanDotNet/SokobanDotNet.csproj": {}
+    "E:\\Dev\\SokobanDotNet\\SokobanDotNet\\SokobanDotNet.csproj": {}
   },
   "projects": {
-    "/Users/aiden/dev/SokobanDotNet/SokobanDotNet/SokobanDotNet.csproj": {
+    "E:\\Dev\\SokobanDotNet\\SokobanDotNet\\SokobanDotNet.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/Users/aiden/dev/SokobanDotNet/SokobanDotNet/SokobanDotNet.csproj",
+        "projectUniqueName": "E:\\Dev\\SokobanDotNet\\SokobanDotNet\\SokobanDotNet.csproj",
         "projectName": "SokobanDotNet",
-        "projectPath": "/Users/aiden/dev/SokobanDotNet/SokobanDotNet/SokobanDotNet.csproj",
-        "packagesPath": "/Users/aiden/.nuget/packages/",
-        "outputPath": "/Users/aiden/dev/SokobanDotNet/SokobanDotNet/obj/",
+        "projectPath": "E:\\Dev\\SokobanDotNet\\SokobanDotNet\\SokobanDotNet.csproj",
+        "packagesPath": "C:\\Users\\yuyan\\.nuget\\packages\\",
+        "outputPath": "E:\\Dev\\SokobanDotNet\\SokobanDotNet\\obj\\",
         "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "D:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
         "configFilePaths": [
-          "/Users/aiden/.nuget/NuGet/NuGet.Config"
+          "C:\\Users\\yuyan\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [
           "net6.0"
         ],
         "sources": {
-          "/usr/local/share/dotnet/library-packs": {},
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "C:\\Program Files\\dotnet\\library-packs": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
@@ -54,7 +60,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/7.0.202/RuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\7.0.100\\RuntimeIdentifierGraph.json"
         }
       }
     }
