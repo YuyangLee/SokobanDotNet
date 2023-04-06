@@ -13,15 +13,15 @@ namespace SokobanDotNet
 
         public GameSolver(SokobanGame game)
 		{
-			BaseGame = (SokobanGame)game.Clone();
+			BaseGame = new(game);
             DistIndexPermutations = Utils.Permutate(game.BoxLocations.Count);
 			SearchList = new();
 			AppendToSearchList(BaseGame);
         }
 
-		private void AppendToSearchList(SokobanGame game) => SearchList.Enqueue(game, TargetManhattanDistance(game) + game.StepsCount);
+		private void AppendToSearchList(SokobanGame game) => SearchList.Enqueue(game, TargetManhattanDistance(ref game) + game.StepsCount);
 
-        public int TargetManhattanDistance(SokobanGame game)
+        public int TargetManhattanDistance(ref SokobanGame game)
 		{
 			int dist = int.MaxValue, manhattanDists = 0;
 
@@ -45,6 +45,7 @@ namespace SokobanDotNet
 				foreach (var child in childrenGames)
 				{
 					if (child.CheckWin()) return child.GetActionChain();
+					AppendToSearchList(child);
 				}
             }
 
@@ -52,4 +53,3 @@ namespace SokobanDotNet
 		}
 	}
 }
-

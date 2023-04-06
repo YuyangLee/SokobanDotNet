@@ -12,9 +12,7 @@ try
     // Read from TXT file
     string[] mapData = File.ReadAllLines(gameFilePath);
 
-    SokobanGame game = new();
-    game.ParseMapFromStrings(mapData);
-
+    SokobanGame game = new(mapData);
 
     if (!SokobanGame.IsSolvable(game))
     {
