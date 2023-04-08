@@ -1,6 +1,30 @@
 ﻿using System;
 namespace SokobanDotNet
 {
+	internal class PlannerNode
+	{
+		public Tuple<int, int> Position;
+        public PlayerAction LastAction;
+		public PlannerNode? LastNode;
+		public PlannerNode(Tuple<int, int> position, PlayerAction lastAction, ref PlannerNode? lastNode)
+		{
+			Position = position;
+			LastAction = lastAction;
+			LastNode = lastNode;
+		}
+
+		public List<PlayerAction> GetActionChain()
+		{
+			if (LastNode is null) return new() { LastAction };
+			var prevActions = LastNode.GetActionChain();
+			prevActions.Add(LastAction);
+			return prevActions;
+		}
+	}
+	internal static class PathPlanner
+	{
+		
+	}
 	internal class GameSolver
 	{
 		private List<List<int>> DistIndexPermutations;
@@ -20,6 +44,13 @@ namespace SokobanDotNet
 			AppendToSearchList(BaseGame);
         }
 
+		public List<PlayerAction> PathPlanning(SokobanGame game, Tuple<int, int> fromLocation, Tuple<int, int> toLocation)
+		{
+			List<PlayerAction> actions = new();
+
+			return actions;
+		}
+
 		private void AppendToSearchList(SokobanGame game)
 		{
 			int heuristicValue = TargetManhattanDistance(ref game) + game.StepsCount;
@@ -29,20 +60,28 @@ namespace SokobanDotNet
         }
 
         public int TargetManhattanDistance(ref SokobanGame game)
-		{
-			int dist = int.MaxValue, manhattanDists = 0;
+        {
+            int dist = int.MaxValue, manhattanDists = 0;
 
-			foreach (var indices in DistIndexPermutations)
-			{
-				manhattanDists = 0;
-				for (int i = 0; i < game.BoxLocations.Count; i++) manhattanDists += Math.Abs(game.BoxLocations[i].Item1 - game.HoleLocations[indices[i]].Item1) + Math.Abs(game.BoxLocations[i].Item2 - game.HoleLocations[indices[i]].Item2);
-				dist = dist < manhattanDists ? dist : manhattanDists;
+            foreach (var indices in DistIndexPermutations)
+            {
+                manhattanDists = 0;
+                for (int i = 0; i < game.BoxLocations.Count; i++) manhattanDists += Math.Abs(game.BoxLocations[i].Item1 - game.HoleLocations[indices[i]].Item1) + Math.Abs(game.BoxLocations[i].Item2 - game.HoleLocations[indices[i]].Item2);
+                dist = dist < manhattanDists ? dist : manhattanDists;
             }
 
-			return manhattanDists;
-		}
+            return manhattanDists;
+        }
 
-		public List<PlayerAction> SolveGame()
+		public int PairedTargetManhattanDistance(ref SokobanGame game) => game.BoxLocations.Zip(game.HoleLocations, (b, h) => Utils.ManhattanDistance(b, h)).Sum();
+        //{
+        //    int manhattanDists = 0;
+        //    for (int i = 0; i < game.BoxLocations.Count; i++) manhattanDists += Math.Abs(game.BoxLocations[i].Item1 - game.HoleLocations[i].Item1) + Math.Abs(game.BoxLocations[i].Item2 - game.HoleLocations[i].Item2);
+
+        //    return manhattanDists;
+        //}
+
+        public List<PlayerAction> SolveGame()
 		{
 			while (SearchList.Count > 0)
 			{

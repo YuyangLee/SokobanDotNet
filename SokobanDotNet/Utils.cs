@@ -17,6 +17,8 @@ namespace SokobanDotNet
             return result;
         }
 
+        public static int ManhattanDistance(Tuple<int, int> from, Tuple<int, int> To) => Math.Abs(from.Item1- To.Item1) + Math.Abs(from.Item1- To.Item2);
+
         private static void PermuteHelper(List<List<int>> result, List<int> sequence, int index)
         {
             if (index == sequence.Count - 1)
