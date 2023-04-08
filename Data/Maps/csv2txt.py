@@ -7,8 +7,15 @@ Description: Turn CSV file to a TXT file that describes the game.
 '''
 import csv
 import os
+import argparse
 
-in_file = "Basic.csv"
+parser = argparse.ArgumentParser()
+
+parser.add_argument("--in_file", type=str, default="Basic.csv", help="Input CSV file.")
+
+args = parser.parse_args()
+
+in_file = args.in_file
 out_file = in_file[:-4] + ".txt"
 
 data = list(csv.reader(open(in_file, 'r', encoding='utf-8-sig')))

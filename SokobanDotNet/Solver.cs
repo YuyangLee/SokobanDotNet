@@ -6,6 +6,7 @@ namespace SokobanDotNet
 		private List<List<int>> DistIndexPermutations;
 
 		private PriorityQueue<SokobanGame, int> SearchList;
+		private List<SokobanGame> SearchedNodes = new();
 
         private static PlayerAction[] UserActions = { PlayerAction.Up, PlayerAction.Down, PlayerAction.Left, PlayerAction.Right };
 
@@ -22,7 +23,8 @@ namespace SokobanDotNet
 		private void AppendToSearchList(SokobanGame game)
 		{
 			int heuristicValue = TargetManhattanDistance(ref game) + game.StepsCount;
-			Console.WriteLine("Current h = " + heuristicValue.ToString() + "Current step = " + game.StepsCount.ToString());
+			//Console.WriteLine("Current h = " + heuristicValue.ToString() + ". Current step = " + game.StepsCount.ToString() + ".");
+			SearchedNodes.Add(game);
             SearchList.Enqueue(game, heuristicValue);
         }
 
@@ -46,12 +48,22 @@ namespace SokobanDotNet
 			{
 				var head = SearchList.Dequeue();
 
+				//Console.Clear();
+				//Console.WriteLine(head.ToString());
+
 				var childrenGames = head.ExecutePossibleActions();
+
 				foreach (var child in childrenGames)
 				{
-					if (child.CheckWin()) return child.GetActionChain();
-					AppendToSearchList(child);
-				}
+					if (child.CheckWin())
+					{
+                        var chain = child.GetActionChain();
+						// TODO: Move the BaseNode out of this loop.
+						return chain.GetRange(1, chain.Count - 1);
+                    }
+					if (!SearchedNodes.Any(game => game.Equals(child))) AppendToSearchList(child);
+                    //AppendToSearchList(child);
+                }
             }
 
 			return new();

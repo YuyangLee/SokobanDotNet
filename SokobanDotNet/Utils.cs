@@ -38,5 +38,7 @@ namespace SokobanDotNet
             sequence[i] = sequence[j];
             sequence[j] = temp;
         }
+
+        public static string ActionsToString(List<PlayerAction> actions) => "[ " + actions.Aggregate("", (current, s) => current + (s + ", ")) + " ]";
     }
 }

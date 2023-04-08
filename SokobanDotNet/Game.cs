@@ -88,19 +88,24 @@ namespace SokobanDotNet
                                      "  Push the stones \"o\" into the holes \"口\"! \n" +
                                      "===============================================\n";
 
+        public bool Equals(ref SokobanGame game)
+        {
+            if (game.PlayerCol != PlayerCol || game.PlayerRow != PlayerRow) return false;
+            for (int i = 0; i < BoxLocations.Count; i++) if (game.BoxLocations[i] != BoxLocations[i]) return false;
+
+            return true;
+        }
+
         public bool NotInChain(ref SokobanGame game)
         {
             //if (this == game) return false;
             if (game.PlayerCol != PlayerCol || game.PlayerRow != PlayerRow) return this.ParentGame is null ? true : this.ParentGame.NotInChain(ref game);
-            else
+            for (int i = 0; i < BoxLocations.Count; i++)
             {
-                for (int i = 0; i < BoxLocations.Count; i++)
-                {
-                    if (game.BoxLocations[i] != BoxLocations[i]) return this.ParentGame is null ? true : this.ParentGame.NotInChain(ref game);
-                }
+                if (game.BoxLocations[i] != BoxLocations[i]) return this.ParentGame is null ? true : this.ParentGame.NotInChain(ref game);
             }
 
-            return true;
+            return false;
         }
 
         public List<SokobanGame> ExecutePossibleActions()
@@ -110,7 +115,7 @@ namespace SokobanDotNet
             {
                 SokobanGame movedGame = this.Birth();
                 if (((movedGame.Move(action) & MoveResult.Success) > 0)
-                    && this.NotInChain(ref movedGame)
+                    //&& this.NotInChain(ref movedGame)
                     && !movedGame.HasStuck())
                 {
                     possibleGames.Add(movedGame);
@@ -419,7 +424,7 @@ namespace SokobanDotNet
 
         public List<PlayerAction> GetActionChain()
         {
-            if (this.ParentGame is null) return new List<PlayerAction>() { LastPlayerAction };
+            if (this.ParentGame is null) return new();
             var actionChain = this.ParentGame.GetActionChain();
             actionChain.Add(this.LastPlayerAction);
             return actionChain;
@@ -448,11 +453,15 @@ namespace SokobanDotNet
                     this.Reset();
                     return "Reset the game.";
                 case ConsoleKey.S:
+                    Console.WriteLine("Searching for the solution...");
+
                     var actionChain = this.Solve();
                     if (actionChain.Count == 0) return "Found no solution.";
 
-                    foreach (var solvedAction in actionChain) this.Move(solvedAction);
-                    return "Found a solution with " + actionChain.Count.ToString() + " step(s).";
+                    this.ShowResult(actionChain);
+                    this.Status = GameStatus.End;
+                    return "Found a solution with " + actionChain.Count.ToString() + " step(s).\n" +
+                          $"Actions: {Utils.ActionsToString(actionChain)}";
                 case ConsoleKey.Q:
                     this.Status = GameStatus.End;
                     return "Quitted the game.";
@@ -502,6 +511,23 @@ namespace SokobanDotNet
             return false;
         }
 
+        public void ShowResult(List<PlayerAction> actions)
+        {
+            var actionString = Utils.ActionsToString(actions);
+            for (int i = 0; i < actions.Count; i++)
+            {
+                Move(actions[i]);
+                Console.Clear();
+                Console.WriteLine(this.Instruction);
+                Console.WriteLine("Executed " + this.StepsCount.ToString() + " steps\n");
+                Console.WriteLine(this.ToString());
+                Console.WriteLine($"Showing solution with { i } / {actions.Count} steps.");
+                Console.WriteLine($"Actions: { actionString }");
+
+                Thread.Sleep(500);
+            }
+        }
+
         public void Run()
         {
             string returnedString = "";
@@ -530,6 +556,7 @@ namespace SokobanDotNet
             ParseMapFromMap(game.Map);
             ParentGame = game;
             StepsCount= game.StepsCount + 1;
+            LastPlayerAction = game.LastPlayerAction;
         }
 
         public SokobanGame Birth()
@@ -539,17 +566,5 @@ namespace SokobanDotNet
             return child;
         }
 
-        //public override bool Equals(object? obj)
-        //{
-        //    //return Map == ((SokobanGame)obj).Map;
-        //    for (int i = 0; i < Map.Count; i++)
-        //    {
-        //        for (int j = 0; j < Map[0].Count; j++)
-        //        {
-        //            if ((Map[i][j] ^ ((SokobanGame)obj).Map[i][j]) > 0) return false;
-        //        }
-        //    }
-        //    return true;
-        //}
     }
 }
