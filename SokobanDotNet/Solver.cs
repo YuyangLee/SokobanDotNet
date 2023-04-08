@@ -6,7 +6,7 @@ namespace SokobanDotNet
 		public Tuple<int, int> Position;
         public PlayerAction LastAction;
 		public PlannerNode? LastNode;
-		public PlannerNode(Tuple<int, int> position, PlayerAction lastAction, ref PlannerNode? lastNode)
+		public PlannerNode(Tuple<int, int> position, PlayerAction lastAction, PlannerNode? lastNode)
 		{
 			Position = position;
 			LastAction = lastAction;
@@ -21,10 +21,7 @@ namespace SokobanDotNet
 			return prevActions;
 		}
 	}
-	internal static class PathPlanner
-	{
-		
-	}
+
 	internal class GameSolver
 	{
 		private List<List<int>> DistIndexPermutations;
@@ -74,12 +71,6 @@ namespace SokobanDotNet
         }
 
 		public int PairedTargetManhattanDistance(ref SokobanGame game) => game.BoxLocations.Zip(game.HoleLocations, (b, h) => Utils.ManhattanDistance(b, h)).Sum();
-        //{
-        //    int manhattanDists = 0;
-        //    for (int i = 0; i < game.BoxLocations.Count; i++) manhattanDists += Math.Abs(game.BoxLocations[i].Item1 - game.HoleLocations[i].Item1) + Math.Abs(game.BoxLocations[i].Item2 - game.HoleLocations[i].Item2);
-
-        //    return manhattanDists;
-        //}
 
         public List<PlayerAction> SolveGame()
 		{

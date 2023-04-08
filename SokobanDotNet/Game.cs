@@ -9,11 +9,11 @@ namespace SokobanDotNet
     [Flags]
     enum TileType
     {
-        Ground = 0,
         Blocked = 1,
-        Hole = 2,
-        Box = 4,
-        Player = 8,
+        Ground = 2,
+        Hole = 4,
+        Box = 8,
+        Player = 16,
         Stepable = TileType.Ground | TileType.Hole
     }
 
@@ -58,6 +58,7 @@ namespace SokobanDotNet
         private string[]? _MapData;
 
         private PlayerAction LastPlayerAction = PlayerAction.Undefined;
+        private List<PlayerAction> LastPlayerActions = new();
 
         public static Dictionary<PlayerAction, Tuple<int, int>> ActionToDeltas = new()
         {
@@ -82,11 +83,11 @@ namespace SokobanDotNet
 
         private GameStatus Status = GameStatus.OnGoing;
 
-        private string Instruction = "=================== CONTROL ===================\n" +
-                                     " Arrow - Move  Q - quit  R - Reset  S - Search \n" +
-                                     "================= INSTRUCTION =================\n" +
-                                     "  Push the stones \"o\" into the holes \"口\"! \n" +
-                                     "===============================================\n";
+        private readonly string Instruction = "=================== CONTROL ===================\n" +
+                                              " Arrow - Move  Q - quit  R - Reset  S - Search \n" +
+                                              "================= INSTRUCTION =================\n" +
+                                              "  Push the stones \"o\" into the holes \"口\"! \n" +
+                                              "===============================================\n";
 
         public bool Equals(ref SokobanGame game)
         {
@@ -99,10 +100,10 @@ namespace SokobanDotNet
         public bool NotInChain(ref SokobanGame game)
         {
             //if (this == game) return false;
-            if (game.PlayerCol != PlayerCol || game.PlayerRow != PlayerRow) return this.ParentGame is null ? true : this.ParentGame.NotInChain(ref game);
+            if (game.PlayerCol != PlayerCol || game.PlayerRow != PlayerRow) return ParentGame is null ? true : ParentGame.NotInChain(ref game);
             for (int i = 0; i < BoxLocations.Count; i++)
             {
-                if (game.BoxLocations[i] != BoxLocations[i]) return this.ParentGame is null ? true : this.ParentGame.NotInChain(ref game);
+                if (game.BoxLocations[i] != BoxLocations[i]) return ParentGame is null ? true : ParentGame.NotInChain(ref game);
             }
 
             return false;
@@ -118,15 +119,20 @@ namespace SokobanDotNet
                     var xyDelta = ActionToDeltas[action];
                     int targetRow = location.Item1 - xyDelta.Item1;
                     int targetCol = location.Item2 - xyDelta.Item2;
+                    int boxTargetRow = location.Item1 + xyDelta.Item1;
+                    int boxTargetCol = location.Item2 + xyDelta.Item2;
+
+                    if ((Map[targetRow][targetCol] & TileType.Stepable) == 0) continue;
+                    if ((Map[boxTargetRow][boxTargetCol] & TileType.Stepable) == 0) continue;
 
                     var movedAndPushedGame = MoveToAndPush(new(targetRow, targetCol), action);
-                    if (movedAndPushedGame is not null && !movedAndPushedGame.HasStuck()) possibleGames.Add(movedGame);
+                    if (movedAndPushedGame is not null && !movedAndPushedGame.HasStuck()) possibleGames.Add(movedAndPushedGame);
                 }
             }
 
             //foreach(var action in new [] { PlayerAction.Up, PlayerAction.Down, PlayerAction.Left, PlayerAction.Right })
             //{
-            //    SokobanGame movedGame = this.Birth();
+            //    SokobanGame movedGame = Birth();
             //    if (((movedGame.Move(action) & MoveResult.Success) > 0) && !movedGame.HasStuck())
             //    {
             //        possibleGames.Add(movedGame);
@@ -147,14 +153,12 @@ namespace SokobanDotNet
 
             _BoxLocations = new();
             _HoleLocations = new();
-            Map = new();
+            Map = new(map);
 
             for (int h = 0; h < Height; h++)
             {
-                List<TileType> row = new();
                 for (int w = 0; w < Width; w++)
                 {
-                    row.Add(map[h][w]);
                     if ((map[h][w] & TileType.Player) > 0)
                     {
                         PlayerCol = w;
@@ -171,9 +175,10 @@ namespace SokobanDotNet
                         _HoleLocations.Add(new(h, w));
                     }
                 }
-                Map.Add(row);
             }
         }
+
+        public TileType CharDigitToTileType(char c) => (TileType)(int)Math.Pow(2, (c - '0'));
 
         public void ParseMapFromStrings(string[]? mapData)
         {
@@ -198,18 +203,19 @@ namespace SokobanDotNet
                 }
                 for (int w = 0; w < Width; w++)
                 {
-                    if (mapData[h][w] == '0' + (int)TileType.Player)
+                    TileType tile = CharDigitToTileType(mapData[h][w]);
+                    if (tile == TileType.Player)
                     {
                         if (PlayerCol != -1 || PlayerRow != -1) throw new Exception("There can only be one player in the map!");
                         PlayerCol = w;
                         PlayerRow = h;
                     }
-                    if (mapData[h][w] == '0' + (int)TileType.Box)
+                    else if(tile == TileType.Box)
                     {
                         NumBoxes++;
                         _BoxLocations.Add(new(h, w));
                     }
-                    else if (mapData[h][w] == '0' + (int)TileType.Hole)
+                    else if (tile == TileType.Hole)
                     {
                         NumHoles++;
                         _HoleLocations.Add(new(h, w));
@@ -219,12 +225,12 @@ namespace SokobanDotNet
 
             for (int h = 0; h < Height; h++)
             {
-                if ((mapData[h][0] != '0' + (int)TileType.Blocked) || (mapData[h][Width - 1]) != '0' + (int)TileType.Blocked) throw new Exception("The Border must be blocked!");
+                if ((CharDigitToTileType(mapData[h][0]) != TileType.Blocked) || CharDigitToTileType(mapData[h][Width-1]) != TileType.Blocked) throw new Exception("The Border must be blocked!");
             }
 
             for (int w = 0; w < Width; w++)
             {
-                if ((mapData[0][w] != '0' + (int)TileType.Blocked) || (mapData[Height-1][w]) != '0' + (int)TileType.Blocked) throw new Exception("The Border must be blocked!");
+                if ((CharDigitToTileType(mapData[0][w]) != TileType.Blocked) || CharDigitToTileType(mapData[Height-1][w]) != TileType.Blocked) throw new Exception("The Border must be blocked!");
             }
 
             if (NumBoxes != NumHoles) throw new Exception($"There must be equal amount of box(es) and hole(s)!");
@@ -235,9 +241,13 @@ namespace SokobanDotNet
             for (int h = 0; h < Height; h++)
             {
                 List<TileType> row = new();
-                for (int w = 0; w < Width; w++) row.Add((TileType)mapData[h][w] - '0');
+                for (int w = 0; w < Width; w++) row.Add(CharDigitToTileType(mapData[h][w]));
                 Map.Add(row);
             }
+
+            Map[PlayerRow][PlayerCol] |= TileType.Ground;
+
+            foreach (var location in BoxLocations) Map[location.Item1][location.Item2] |= TileType.Ground;
 
             SetBackup(mapData);
         }
@@ -262,10 +272,10 @@ namespace SokobanDotNet
                         case TileType.Hole:
                             toString += "口";
                             break;
-                        case TileType.Box:
+                        case TileType.Box | TileType.Ground:
                             toString += "ｏ";
                             break;
-                        case TileType.Player:
+                        case TileType.Player | TileType.Ground:
                             toString += "你";
                             break;
                         case TileType.Player | TileType.Hole:
@@ -286,9 +296,9 @@ namespace SokobanDotNet
         /// </summary>
         private void Reset()
         {
-            this.ParseMapFromStrings(this._MapData);
-            this.Status = GameStatus.OnGoing;
-            this.StepsCount = 0;
+            ParseMapFromStrings(_MapData);
+            Status = GameStatus.OnGoing;
+            StepsCount = 0;
         }
 
         /// <summary>
@@ -325,10 +335,11 @@ namespace SokobanDotNet
         /// Plan a path for a Transported node, from the last position to current without moving the boxes.
         /// </summary>
         /// <returns>Action for the path.</returns>
-        private List<PlayerAction> PlanPath()
+        private bool PlanPath()
         {
-            Tuple<int, int> from = new(this.ParentGame.PlayerRow, this.ParentGame.PlayerCol);
-            Tuple<int, int> to = new(this.PlayerRow, this.PlayerCol);
+            if (ParentGame is null) throw new Exception("Fatal error! Found null ParentGame！");
+            Tuple<int, int> from = new(ParentGame.PlayerRow, ParentGame.PlayerCol);
+            Tuple<int, int> to = new(PlayerRow, PlayerCol);
 
             // TODO: Implementation
             PriorityQueue<PlannerNode, int> pathSearchList = new();
@@ -339,7 +350,11 @@ namespace SokobanDotNet
             while (pathSearchList.Count > 0)
             {
                 var head = pathSearchList.Dequeue();
-                if (head.Position == to) return head.GetActionChain();
+                if (head.Position == to)
+                {
+                    LastPlayerActions = head.GetActionChain();
+                    return true;
+                }
 
                 foreach (var action in new[] { PlayerAction.Up, PlayerAction.Down, PlayerAction.Left, PlayerAction.Right })
                 {
@@ -350,21 +365,11 @@ namespace SokobanDotNet
                     if (IsOutside(targetRow, targetCol)) continue;
                     if ((auxMap[targetRow][targetCol] | TileType.Stepable) == 0) continue;
 
-                    pathSearchList.Enqueue(new(new(targetRow, targetCol), action, ref head), Utils.ManhattanDistance(new(targetRow, targetCol), to));
+                    pathSearchList.Enqueue(new(new(targetRow, targetCol), action, head), Utils.ManhattanDistance(new(targetRow, targetCol), to));
                     auxMap[targetRow][targetCol] = TileType.Blocked;
                 }
             }
 
-            return new();
-        }
-
-        /// <summary>
-        /// Whether the player can move to a target location without pushing any box
-        /// </summary>
-        /// <param name="targetLocation">Target location</param>
-        /// <returns></returns>
-        public bool CanMoveTo(Tuple<int, int> targetLoation)
-        {
             return false;
         }
 
@@ -376,13 +381,13 @@ namespace SokobanDotNet
         /// <returns>Moved-and-pushed game. Returns null if the action is not possible.</returns>
         public SokobanGame? MoveToAndPush(Tuple<int, int> targetLocation, PlayerAction action)
         {
-            if (!CanMoveTo(targetLocation, action)) return null;
-
             PlayerRow = targetLocation.Item1;
             PlayerCol = targetLocation.Item2;
             LastPlayerAction = PlayerAction.Transported;
 
-            var game = this.Birth();
+            if (PlanPath()) return null;
+
+            var game = Birth();
             return (game.Move(action) & MoveResult.Success) > 0 ? game : null;
         }
 
@@ -403,18 +408,10 @@ namespace SokobanDotNet
             if (IsOutside(targetRow, targetCol)) return MoveResult.FailedMove;
             if (Map[targetRow][targetCol] == TileType.Blocked) return MoveResult.FailedMove;
 
-
             MoveResult result;
 
-            if ((Map[targetRow][targetCol] == TileType.Ground) || (Map[targetRow][targetCol] == TileType.Hole))
-            {
-                Map[PlayerRow][PlayerCol] &= ~TileType.Player;
-                Map[targetRow][targetCol] |= TileType.Player;
-                PlayerRow = targetRow;
-                PlayerCol = targetCol;
-                result = MoveResult.SuccessfulMove;
-            }
-            else if ((Map[targetRow][targetCol] & TileType.Box) > 0)
+            
+            if ((Map[targetRow][targetCol] & TileType.Box) > 0)
             {
                 int boxTargetRow = targetRow + targetDeltaRow;
                 int boxTargetCol = targetCol + targetDeltaCol;
@@ -440,6 +437,14 @@ namespace SokobanDotNet
                 PlayerCol = targetCol;
                 result = MoveResult.SuccessPush;
             }
+            else if ((Map[targetRow][targetCol] & TileType.Stepable) > 0)
+            {
+                Map[PlayerRow][PlayerCol] &= ~TileType.Player;
+                Map[targetRow][targetCol] |= TileType.Player;
+                PlayerRow = targetRow;
+                PlayerCol = targetCol;
+                result = MoveResult.SuccessfulMove;
+            }
             else return MoveResult.FailedMove;
 
             StepsCount++;
@@ -449,11 +454,14 @@ namespace SokobanDotNet
 
         public List<PlayerAction> GetActionChain()
         {
-            if (this.ParentGame is null) return new();
-            var actionChain = this.ParentGame.GetActionChain();
+            if (ParentGame is null) return new();
+            var actionChain = ParentGame.GetActionChain();
 
-            if (this.LastPlayerAction == PlayerAction.Transported) actionChain.AddRange(this.PlanPath());
-            else actionChain.Add(this.LastPlayerAction);
+            // Already planned
+            // PlanPath()
+
+            if (LastPlayerAction == PlayerAction.Transported) actionChain.AddRange(LastPlayerActions);
+            else actionChain.Add(LastPlayerAction);
             return actionChain;
         }
 
@@ -482,20 +490,20 @@ namespace SokobanDotNet
                     action = PlayerAction.Right;
                     break;
                 case ConsoleKey.R:
-                    this.Reset();
+                    Reset();
                     return "Reset the game.";
                 case ConsoleKey.S:
                     Console.WriteLine("Searching for the solution...");
 
-                    var actionChain = this.Solve();
+                    var actionChain = Solve();
                     if (actionChain.Count == 0) return "Found no solution.";
 
-                    this.ShowResult(actionChain);
-                    this.Status = GameStatus.End;
+                    ShowResult(actionChain);
+                    Status = GameStatus.End;
                     return "Found a solution with " + actionChain.Count.ToString() + " step(s).\n" +
                           $"Actions: {Utils.ActionsToString(actionChain)}";
                 case ConsoleKey.Q:
-                    this.Status = GameStatus.End;
+                    Status = GameStatus.End;
                     return "Quitted the game.";
                 default: return "";
             }
@@ -506,16 +514,16 @@ namespace SokobanDotNet
             {
                 if (CheckWin())
                 {
-                    this.Status = GameStatus.End;
+                    Status = GameStatus.End;
                     return "You win!";
                 }
-                if (((result & MoveResult.Success) > 0) && this.HasStuck())
+                if (((result & MoveResult.Success) > 0) && HasStuck())
                 {
-                    this.Status = GameStatus.Stuck;
+                    Status = GameStatus.Stuck;
                     return "Got stuck!";
                 }
 
-                else this.Status = GameStatus.OnGoing;
+                else Status = GameStatus.OnGoing;
             }
             return "";
         }
@@ -565,9 +573,9 @@ namespace SokobanDotNet
             {
                 Move(actions[i]);
                 Console.Clear();
-                Console.WriteLine(this.Instruction);
-                Console.WriteLine("Executed " + this.StepsCount.ToString() + " steps\n");
-                Console.WriteLine(this.ToString());
+                Console.WriteLine(Instruction);
+                Console.WriteLine("Executed " + StepsCount.ToString() + " steps\n");
+                Console.WriteLine(ToString());
                 Console.WriteLine($"Showing solution with { i } / {actions.Count} steps.");
                 Console.WriteLine($"Actions: { actionString }");
 
@@ -584,11 +592,11 @@ namespace SokobanDotNet
             while (true)
             {
                 Console.Clear();
-                Console.WriteLine(this.Instruction);
-                Console.WriteLine(this.ToString());
-                Console.WriteLine("Executed steps: " + this.StepsCount.ToString());
+                Console.WriteLine(Instruction);
+                Console.WriteLine(ToString());
+                Console.WriteLine("Executed steps: " + StepsCount.ToString());
                 Console.WriteLine(returnedString);
-                if (this.Status == GameStatus.End) return;
+                if (Status == GameStatus.End) return;
 
                 var PlayerInput = Console.ReadKey(true);
                 returnedString = HandlePlayerInput(PlayerInput);
@@ -596,7 +604,7 @@ namespace SokobanDotNet
         }
 
         // Shadow copy is not enough.
-        //public object Clone() => this.MemberwiseClone();
+        //public object Clone() => MemberwiseClone();
 
         /// <summary>
         /// Parse the game map from strings.
@@ -619,7 +627,7 @@ namespace SokobanDotNet
         /// <summary>
         /// Give birth to a child node. This is for generating search nodes.
         /// </summary>
-        /// <returns>A copied child SokobanGame instance with ParentGame pointing to this.</returns>
+        /// <returns>A copied child SokobanGame instance with ParentGame pointing to </returns>
         public SokobanGame Birth()
         {
             SokobanGame child = new(this);
