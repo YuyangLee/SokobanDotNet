@@ -15,7 +15,7 @@ namespace SokobanDotNet
 
 		public List<PlayerAction> GetActionChain()
 		{
-			if (LastNode is null) return new() { LastAction };
+			if (LastNode is null) return new() { };
 			var prevActions = LastNode.GetActionChain();
 			prevActions.Add(LastAction);
 			return prevActions;
@@ -50,9 +50,10 @@ namespace SokobanDotNet
 
 		private void AppendToSearchList(SokobanGame game)
 		{
-			int heuristicValue = TargetManhattanDistance(ref game) + game.StepsCount;
-			//Console.WriteLine("Current h = " + heuristicValue.ToString() + ". Current step = " + game.StepsCount.ToString() + ".");
-			SearchedNodes.Add(game);
+			int heuristicValue = TargetManhattanDistance(ref game) + game.Cost;
+			//int heuristicValue = TargetManhattanDistance(ref game) + game.StepsCount;
+            //Console.WriteLine("Current h = " + heuristicValue.ToString() + ". Current step = " + game.StepsCount.ToString() + ".");
+            SearchedNodes.Add(game);
             SearchList.Enqueue(game, heuristicValue);
         }
 
@@ -88,8 +89,7 @@ namespace SokobanDotNet
 					if (child.CheckWin())
 					{
                         var chain = child.GetActionChain();
-						// TODO: Move the BaseNode out of this loop.
-						return chain.GetRange(1, chain.Count - 1);
+						return chain;
                     }
 					if (!SearchedNodes.Any(game => game.Equals(child))) AppendToSearchList(child);
                     //AppendToSearchList(child);

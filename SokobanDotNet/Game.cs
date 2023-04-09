@@ -14,7 +14,7 @@ namespace SokobanDotNet
         Hole = 4,
         Box = 8,
         Player = 16,
-        Stepable = TileType.Ground | TileType.Hole
+        Unstepable = TileType.Box | TileType.Blocked
     }
 
     enum PlayerAction { Undefined, Transported, Left, Right, Up, Down }
@@ -57,8 +57,9 @@ namespace SokobanDotNet
 
         private string[]? _MapData;
 
-        private PlayerAction LastPlayerAction = PlayerAction.Undefined;
         private List<PlayerAction> LastPlayerActions = new();
+
+        public int Cost { get => LastPlayerActions.Count + StepsCount - 1; }
 
         public static Dictionary<PlayerAction, Tuple<int, int>> ActionToDeltas = new()
         {
@@ -122,10 +123,12 @@ namespace SokobanDotNet
                     int boxTargetRow = location.Item1 + xyDelta.Item1;
                     int boxTargetCol = location.Item2 + xyDelta.Item2;
 
-                    if ((Map[targetRow][targetCol] & TileType.Stepable) == 0) continue;
-                    if ((Map[boxTargetRow][boxTargetCol] & TileType.Stepable) == 0) continue;
+                    if ((Map[targetRow][targetCol] & TileType.Unstepable) > 0) continue;
+                    if ((Map[boxTargetRow][boxTargetCol] & TileType.Unstepable) > 0) continue;
 
-                    var movedAndPushedGame = MoveToAndPush(new(targetRow, targetCol), action);
+                    SokobanGame game = this.Birth();
+
+                    var movedAndPushedGame = game.MoveToAndPush(new(targetRow, targetCol), action);
                     if (movedAndPushedGame is not null && !movedAndPushedGame.HasStuck()) possibleGames.Add(movedAndPushedGame);
                 }
             }
@@ -144,6 +147,7 @@ namespace SokobanDotNet
 
         public void ParseMapFromMap(List<List<TileType>> map)
         {
+            Map = Utils.DuplicateMap(map);
             Height = map.Count;
             Width = map[0].Count;
 
@@ -153,7 +157,6 @@ namespace SokobanDotNet
 
             _BoxLocations = new();
             _HoleLocations = new();
-            Map = new(map);
 
             for (int h = 0; h < Height; h++)
             {
@@ -335,7 +338,7 @@ namespace SokobanDotNet
         /// Plan a path for a Transported node, from the last position to current without moving the boxes.
         /// </summary>
         /// <returns>Action for the path.</returns>
-        private bool PlanPath()
+        public bool PlanPath()
         {
             if (ParentGame is null) throw new Exception("Fatal error! Found null ParentGame！");
             Tuple<int, int> from = new(ParentGame.PlayerRow, ParentGame.PlayerCol);
@@ -345,16 +348,16 @@ namespace SokobanDotNet
             PriorityQueue<PlannerNode, int> pathSearchList = new();
             pathSearchList.Enqueue(new(from, PlayerAction.Undefined, null), Utils.ManhattanDistance(from, to));
 
-            List<List<TileType>> auxMap = new(Map);
-
+            List<List<TileType>> auxMap = Utils.DuplicateMap(Map);
             while (pathSearchList.Count > 0)
             {
                 var head = pathSearchList.Dequeue();
-                if (head.Position == to)
+                if (head.Position.Item1 == to.Item1 && head.Position.Item2 == to.Item2)
                 {
                     LastPlayerActions = head.GetActionChain();
                     return true;
                 }
+                auxMap[from.Item1][from.Item2] = TileType.Blocked;
 
                 foreach (var action in new[] { PlayerAction.Up, PlayerAction.Down, PlayerAction.Left, PlayerAction.Right })
                 {
@@ -363,7 +366,7 @@ namespace SokobanDotNet
                     int targetCol = head.Position.Item2 + xyDelta.Item2;
 
                     if (IsOutside(targetRow, targetCol)) continue;
-                    if ((auxMap[targetRow][targetCol] | TileType.Stepable) == 0) continue;
+                    if ((auxMap[targetRow][targetCol] & TileType.Unstepable) > 0) continue;
 
                     pathSearchList.Enqueue(new(new(targetRow, targetCol), action, head), Utils.ManhattanDistance(new(targetRow, targetCol), to));
                     auxMap[targetRow][targetCol] = TileType.Blocked;
@@ -381,12 +384,13 @@ namespace SokobanDotNet
         /// <returns>Moved-and-pushed game. Returns null if the action is not possible.</returns>
         public SokobanGame? MoveToAndPush(Tuple<int, int> targetLocation, PlayerAction action)
         {
+            Map[PlayerRow][PlayerCol] &= ~TileType.Player;
             PlayerRow = targetLocation.Item1;
             PlayerCol = targetLocation.Item2;
-            LastPlayerAction = PlayerAction.Transported;
+            Map[PlayerRow][PlayerCol] |= TileType.Player;
 
-            if (PlanPath()) return null;
-
+            if (!PlanPath()) return null;
+            
             var game = Birth();
             return (game.Move(action) & MoveResult.Success) > 0 ? game : null;
         }
@@ -437,7 +441,7 @@ namespace SokobanDotNet
                 PlayerCol = targetCol;
                 result = MoveResult.SuccessPush;
             }
-            else if ((Map[targetRow][targetCol] & TileType.Stepable) > 0)
+            else if ((Map[targetRow][targetCol] & TileType.Unstepable) == 0)
             {
                 Map[PlayerRow][PlayerCol] &= ~TileType.Player;
                 Map[targetRow][targetCol] |= TileType.Player;
@@ -448,7 +452,7 @@ namespace SokobanDotNet
             else return MoveResult.FailedMove;
 
             StepsCount++;
-            LastPlayerAction = action;
+            LastPlayerActions = new() { action };
             return result;
         }
 
@@ -460,8 +464,7 @@ namespace SokobanDotNet
             // Already planned
             // PlanPath()
 
-            if (LastPlayerAction == PlayerAction.Transported) actionChain.AddRange(LastPlayerActions);
-            else actionChain.Add(LastPlayerAction);
+            actionChain.AddRange(LastPlayerActions);
             return actionChain;
         }
 
@@ -619,9 +622,8 @@ namespace SokobanDotNet
         public SokobanGame(SokobanGame game)
         {
             ParseMapFromMap(game.Map);
-            ParentGame = game;
             StepsCount = game.StepsCount;
-            LastPlayerAction = game.LastPlayerAction;
+            LastPlayerActions = game.LastPlayerActions;
         }
 
         /// <summary>

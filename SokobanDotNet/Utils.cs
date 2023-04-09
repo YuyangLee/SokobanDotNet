@@ -8,6 +8,14 @@ namespace SokobanDotNet
 {
     internal static class Utils
     {
+        public static List<List<TileType>> DuplicateMap(List<List<TileType>> tiles)
+        {
+            List<List<TileType>> newList = new();
+            tiles.ForEach(item => newList.Add(new(item)));
+
+            return newList;
+        }
+
         public static List<List<int>> Permute(int n)
         {
             List<List<int>> result = new List<List<int>>();
