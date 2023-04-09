@@ -59,7 +59,7 @@ namespace SokobanDotNet
 
         private List<PlayerAction> LastPlayerActions = new();
 
-        public int Cost { get => LastPlayerActions.Count + StepsCount - 1; }
+        public int Cost { get => StepsCount; }
 
         public static Dictionary<PlayerAction, Tuple<int, int>> ActionToDeltas = new()
         {
@@ -355,6 +355,7 @@ namespace SokobanDotNet
                 if (head.Position.Item1 == to.Item1 && head.Position.Item2 == to.Item2)
                 {
                     LastPlayerActions = head.GetActionChain();
+                    StepsCount += LastPlayerActions.Count;
                     return true;
                 }
                 auxMap[from.Item1][from.Item2] = TileType.Blocked;

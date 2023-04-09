@@ -48,11 +48,25 @@ dotnet restore && dotnet build
 
 进入关卡后可以看到画面，"口"代表洞口，`o` 代表石头，"你"代表玩家。
 
-![Game UI](Assets/GameUI.png)
+<img src="Assets/GameUI.png" alt="Game UI" style="zoom:50%;" />
 
 通过方向键移动，`Q` 退出游戏，`R` 重置游戏，`S` 启动搜索算法从当前状态搜索解。将石头推入洞口后该位置的"口"变为"回"。将所有石头推入洞口即可获胜。
 
-![Game won](Assets/GameWon.png)
+<img src="Assets/GameWon.png" alt="Game won" style="zoom:50%;" />
+
+#### 关卡设计
+
+打开 `Data/Maps/Template.xlsx` 可通过 Excel 设计关卡，数值同上表，颜色会被自动应用。
+
+<img src="E:\Dev\SokobanDotNet\Assets\Map.Design.png" alt="Map design" style="zoom:50%;" />
+
+设计完成后，保存为 CSV 文件，并使用 `csv2txt.py` 转为游戏程序可以读入的关卡数据文档：
+
+```shell
+python csv2txt.py --in_file PATH_TO_CSV_FILE
+```
+
+文件会被保存在同目录下的同名 TXT 文档中。启动游戏时加载该文件即可。
 
 ## 问题建模（Baseline）
 

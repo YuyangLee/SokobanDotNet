@@ -41,12 +41,6 @@ namespace SokobanDotNet
 			AppendToSearchList(BaseGame);
         }
 
-		public List<PlayerAction> PathPlanning(SokobanGame game, Tuple<int, int> fromLocation, Tuple<int, int> toLocation)
-		{
-			List<PlayerAction> actions = new();
-
-			return actions;
-		}
 
 		private void AppendToSearchList(SokobanGame game)
 		{
