@@ -8,6 +8,14 @@ namespace SokobanDotNet
 {
     internal static class Utils
     {
+        public static List<List<TileType>> DuplicateMap(List<List<TileType>> tiles)
+        {
+            List<List<TileType>> newList = new();
+            tiles.ForEach(item => newList.Add(new(item)));
+
+            return newList;
+        }
+
         public static List<List<int>> Permute(int n)
         {
             List<List<int>> result = new List<List<int>>();
@@ -16,6 +24,8 @@ namespace SokobanDotNet
             PermuteHelper(result, sequence, 0);
             return result;
         }
+
+        public static int ManhattanDistance(Tuple<int, int> from, Tuple<int, int> To) => Math.Abs(from.Item1- To.Item1) + Math.Abs(from.Item1- To.Item2);
 
         private static void PermuteHelper(List<List<int>> result, List<int> sequence, int index)
         {
