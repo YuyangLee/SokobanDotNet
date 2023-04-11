@@ -416,7 +416,14 @@ namespace SokobanDotNet
             return actionChain;
         }
 
-        private List<PlayerAction> Solve() => new GameSolver(this).SolveGame();
+        private Tuple<List<PlayerAction>, long>Solve()
+        {
+            GameSolver solver = new(this);
+            var actions = solver.SolveGame();
+            var timeUsed = solver.Watch.ElapsedMilliseconds;
+
+            return new(actions, timeUsed);
+        }
 
         /// <summary>
         /// Handle user key input.
@@ -431,31 +438,38 @@ namespace SokobanDotNet
                 case ConsoleKey.UpArrow:
                     action = PlayerAction.Up;
                     break;
+
                 case ConsoleKey.DownArrow:
                     action = PlayerAction.Down;
                     break;
+
                 case ConsoleKey.LeftArrow:
                     action = PlayerAction.Left;
                     break;
+
                 case ConsoleKey.RightArrow:
                     action = PlayerAction.Right;
                     break;
+
                 case ConsoleKey.R:
                     Reset();
                     return "Reset the game.";
+
                 case ConsoleKey.S:
                     Console.WriteLine("Searching for the solution...");
 
-                    var actionChain = Solve();
-                    if (actionChain.Count == 0) return "Found no solution.";
+                    var res = Solve();
 
-                    ShowResult(actionChain);
+                    if (res.Item1.Count == 0) return $"Found no solution. Used {res.Item2} ms";
+
+                    ShowResult(res);
                     Status = GameStatus.End;
-                    return "Found a solution with " + actionChain.Count.ToString() + " step(s).\n" +
-                          $"Actions: {Utils.ActionsToString(actionChain)}";
+                    return "";
+
                 case ConsoleKey.Q:
                     Status = GameStatus.End;
                     return "Quitted the game.";
+
                 default: return "";
             }
 
@@ -479,22 +493,25 @@ namespace SokobanDotNet
             return "";
         }
 
+        public bool CheckStoneIWin(int stoneI)
+        {
+            if (PairedTarget)
+            {
+                if (StoneLocations[stoneI].Item1 != HoleLocations[stoneI].Item1) return false;
+                if (StoneLocations[stoneI].Item2 != HoleLocations[stoneI].Item2) return false;
+                return true;
+            }
+            else return Map[StoneLocations[stoneI].Item1][StoneLocations[stoneI].Item2] == (TileType.Stone | TileType.Hole);
+        }
+
         /// <summary>
         /// Check if a game hits the goal.
         /// </summary>
         /// <returns></returns>
         public bool CheckWin()
         {
-            if (PairedTarget) 
-            {
-                for (int i = 0; i < StoneLocations.Count; i++)
-                {
-                    if (StoneLocations[i].Item1 != HoleLocations[i].Item1) return false;
-                    if (StoneLocations[i].Item2 != HoleLocations[i].Item2) return false;
-                }
-                return true;
-            }
-            else return HoleLocations.All(location => Map[location.Item1][location.Item2] == (TileType.Stone | TileType.Hole));
+            for (int i = 0; i < StoneLocations.Count; i++) if (!CheckStoneIWin(i)) return false;
+            return true;
         }
 
         /// <summary>
@@ -506,8 +523,11 @@ namespace SokobanDotNet
         private bool HasStuck()
         {
             // In a valid map, the box will not be on the boarder, so no boarder check is needed.
-            foreach (var location in _StoneLocations)
+            for (int i = 0; i < StoneLocations.Count; i++)
             {
+                if (CheckStoneIWin(i)) return false;
+
+                var location = StoneLocations[i];
                 if (Map[location.Item1][location.Item2] == (TileType.Hole | TileType.Stone)) continue;
                 if (((Map[location.Item1    ][location.Item2 + 1] & TileType.Blocked) > 0) && ((Map[location.Item1 + 1][location.Item2    ] & TileType.Blocked) > 0)) return true;
                 if (((Map[location.Item1 + 1][location.Item2    ] & TileType.Blocked) > 0) && ((Map[location.Item1    ][location.Item2 - 1] & TileType.Blocked) > 0)) return true;
@@ -521,8 +541,10 @@ namespace SokobanDotNet
         /// Demonstrate the searched solution.
         /// </summary>
         /// <param name="actions"></param>
-        public void ShowResult(List<PlayerAction> actions)
+        public void ShowResult(Tuple<List<PlayerAction>, long> res)
         {
+            var actions = res.Item1;
+            var timeUsed = res.Item2;
             var actionString = Utils.ActionsToString(actions);
             for (int i = 0; i < actions.Count; i++)
             {
@@ -532,7 +554,7 @@ namespace SokobanDotNet
                 Console.WriteLine("Executed " + StepsCount.ToString() + " steps\n");
                 Console.WriteLine(ToString());
                 Console.WriteLine($"Showing solution with { i } / {actions.Count} steps.");
-                Console.WriteLine($"Actions: { actionString }");
+                Console.WriteLine($"Actions: { actionString }. Searching used {timeUsed} ms.");
 
                 Thread.Sleep(500);
             }

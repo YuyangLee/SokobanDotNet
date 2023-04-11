@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Diagnostics;
+
 namespace SokobanDotNet
 {
 	internal class PlannerNode
@@ -29,7 +31,9 @@ namespace SokobanDotNet
 		private PriorityQueue<SokobanGame, int> SearchList;
 		private List<SokobanGame> SearchedNodes = new();
 
-		SokobanGame BaseGame;
+		public Stopwatch Watch = new();
+
+        SokobanGame BaseGame;
 
         public GameSolver(SokobanGame game)
 		{
@@ -65,7 +69,9 @@ namespace SokobanDotNet
 
         public List<PlayerAction> SolveGame()
 		{
-			while (SearchList.Count > 0)
+            Watch = new Stopwatch();
+            Watch.Start();
+            while (SearchList.Count > 0)
 			{
 				var head = SearchList.Dequeue();
 
@@ -76,12 +82,17 @@ namespace SokobanDotNet
 
 				foreach (var child in childrenGames)
 				{
-					if (child.CheckWin()) return child.GetActionChain();
+					if (child.CheckWin())
+					{
+                        Watch.Stop();
+                        return child.GetActionChain();
+                    }
                     if (!SearchedNodes.Any(game => game.Equals(child))) AppendToSearchList(child);
                     //AppendToSearchList(child);
                 }
             }
 
+            Watch.Stop();
 			return new();
 		}
 	}
