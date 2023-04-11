@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -14,6 +15,13 @@ namespace SokobanDotNet
             tiles.ForEach(item => newList.Add(new(item)));
 
             return newList;
+        }
+
+        public static List<Tuple<int, int>> DuplicateLocations(List<Tuple<int, int>> locations)
+        {
+            List<Tuple<int, int>> newLocations = new();
+            locations.ForEach(item => newLocations.Add(new(item.Item1, item.Item2)));
+            return newLocations;
         }
 
         public static List<List<int>> Permute(int n)
@@ -50,5 +58,38 @@ namespace SokobanDotNet
         }
 
         public static string ActionsToString(List<PlayerAction> actions) => "[ " + actions.Aggregate("", (current, s) => current + (s + ", ")) + " ]";
+
+        //public static void WriteLineWithColoredChars(string text, List<int> coloredIndices, List<Color> coloredColors)
+        //{
+        //    int startIndex = 0;
+        //    for (int i = 0; i < coloredIndices.Count; i++)
+        //    {
+        //        int endIndex = coloredIndices[i];
+        //        int length = endIndex - startIndex;
+        //        Console.Write(text.Substring(startIndex, length));
+        //        Console.ForegroundColor = ToConsoleColor(coloredColors[i]);
+        //        Console.Write(text.Substring(endIndex, 1));
+        //        Console.ResetColor();
+        //        startIndex = endIndex + 1;
+        //    }
+        //    Console.WriteLine(text.Substring(startIndex));
+        //}
+
+        //private static ConsoleColor ToConsoleColor(Color color)
+        //{
+        //    ConsoleColor[] consoleColors = (ConsoleColor[])Enum.GetValues(typeof(ConsoleColor));
+        //    double rRatio = (double)color.R / 255;
+        //    double gRatio = (double)color.G / 255;
+        //    double bRatio = (double)color.B / 255;
+        //    double brightness = (rRatio * 0.299) + (gRatio * 0.587) + (bRatio * 0.114);
+        //    if (brightness > 0.5)
+        //    {
+        //        return consoleColors[(int)ConsoleColor.Black];
+        //    }
+        //    else
+        //    {
+        //        return consoleColors[(int)ConsoleColor.White];
+        //    }
+        //}
     }
 }

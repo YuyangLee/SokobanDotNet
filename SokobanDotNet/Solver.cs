@@ -29,23 +29,19 @@ namespace SokobanDotNet
 		private PriorityQueue<SokobanGame, int> SearchList;
 		private List<SokobanGame> SearchedNodes = new();
 
-        private static PlayerAction[] UserActions = { PlayerAction.Up, PlayerAction.Down, PlayerAction.Left, PlayerAction.Right };
-
 		SokobanGame BaseGame;
 
         public GameSolver(SokobanGame game)
 		{
 			BaseGame = new(game);
-            DistIndexPermutations = Utils.Permute(game.BoxLocations.Count);
+            DistIndexPermutations = Utils.Permute(game.StoneLocations.Count);
 			SearchList = new();
 			AppendToSearchList(BaseGame);
         }
 
-
 		private void AppendToSearchList(SokobanGame game)
 		{
-			int heuristicValue = TargetManhattanDistance(ref game) + game.Cost;
-			//int heuristicValue = TargetManhattanDistance(ref game) + game.StepsCount;
+			int heuristicValue = (game.PairedTarget ? TargetManhattanDistance(ref game) : PairedTargetManhattanDistance(ref game)) + game.Cost;
             //Console.WriteLine("Current h = " + heuristicValue.ToString() + ". Current step = " + game.StepsCount.ToString() + ".");
             SearchedNodes.Add(game);
             SearchList.Enqueue(game, heuristicValue);
@@ -58,14 +54,14 @@ namespace SokobanDotNet
             foreach (var indices in DistIndexPermutations)
             {
                 manhattanDists = 0;
-                for (int i = 0; i < game.BoxLocations.Count; i++) manhattanDists += Math.Abs(game.BoxLocations[i].Item1 - game.HoleLocations[indices[i]].Item1) + Math.Abs(game.BoxLocations[i].Item2 - game.HoleLocations[indices[i]].Item2);
+                for (int i = 0; i < game.StoneLocations.Count; i++) manhattanDists += Math.Abs(game.StoneLocations[i].Item1 - game.HoleLocations[indices[i]].Item1) + Math.Abs(game.StoneLocations[i].Item2 - game.HoleLocations[indices[i]].Item2);
                 dist = dist < manhattanDists ? dist : manhattanDists;
             }
 
             return manhattanDists;
         }
 
-		public int PairedTargetManhattanDistance(ref SokobanGame game) => game.BoxLocations.Zip(game.HoleLocations, (b, h) => Utils.ManhattanDistance(b, h)).Sum();
+		public int PairedTargetManhattanDistance(ref SokobanGame game) => game.StoneLocations.Zip(game.HoleLocations, (b, h) => Utils.ManhattanDistance(b, h)).Sum();
 
         public List<PlayerAction> SolveGame()
 		{
@@ -80,12 +76,8 @@ namespace SokobanDotNet
 
 				foreach (var child in childrenGames)
 				{
-					if (child.CheckWin())
-					{
-                        var chain = child.GetActionChain();
-						return chain;
-                    }
-					if (!SearchedNodes.Any(game => game.Equals(child))) AppendToSearchList(child);
+					if (child.CheckWin()) return child.GetActionChain();
+                    if (!SearchedNodes.Any(game => game.Equals(child))) AppendToSearchList(child);
                     //AppendToSearchList(child);
                 }
             }
