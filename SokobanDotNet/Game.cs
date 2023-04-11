@@ -16,7 +16,8 @@ namespace SokobanDotNet
         Hole = 4,
         Stone = 8,
         Player = 16,
-        Unstepable = TileType.Stone | TileType.Blocked
+        Unstepable = TileType.Stone | TileType.Blocked,
+        Stepable = TileType.Ground | TileType.Hole
     }
 
     enum PlayerAction { Undefined, Transported, Left, Right, Up, Down }
@@ -58,7 +59,7 @@ namespace SokobanDotNet
         /// <summary>
         /// Game map.
         /// </summary>
-        private List<List<TileType>> Map = new();
+        public List<List<TileType>> Map = new();
 
         private string[]? _MapData;
 
@@ -96,6 +97,15 @@ namespace SokobanDotNet
                                               "===============================================\n";
 
         public int[]? TargetPairingIndices = null;
+
+        public bool Equals(ref SokobanGame game)
+        {
+            if (game.PlayerCol != PlayerCol || game.PlayerRow != PlayerRow) return false;
+            for (int i = 0; i < StoneLocations.Count; i++) if (game.StoneLocations[i] != StoneLocations[i]) return false;
+
+            return true;
+        }
+
 
         public bool PairedTarget { get => TargetPairingIndices is not null; }
 
@@ -291,7 +301,6 @@ namespace SokobanDotNet
             Tuple<int, int> from = new(ParentGame.PlayerRow, ParentGame.PlayerCol);
             Tuple<int, int> to = new(PlayerRow, PlayerCol);
 
-            // TODO: Implementation
             PriorityQueue<PlannerNode, int> pathSearchList = new();
             pathSearchList.Enqueue(new(from, PlayerAction.Undefined, null), Utils.ManhattanDistance(from, to));
 
@@ -305,7 +314,7 @@ namespace SokobanDotNet
                     StepsCount += LastPlayerActions.Count;
                     return true;
                 }
-                auxMap[from.Item1][from.Item2] = TileType.Blocked;
+                auxMap[head.Position.Item1][head.Position.Item2] = TileType.Blocked;
 
                 foreach (var action in new[] { PlayerAction.Up, PlayerAction.Down, PlayerAction.Left, PlayerAction.Right })
                 {
@@ -322,6 +331,35 @@ namespace SokobanDotNet
             }
 
             return false;
+        }
+
+        public int PlanPathOnBareMap(Tuple<int, int> from, Tuple<int, int> to)
+        {
+            PriorityQueue<PlannerNode, int> pathSearchList = new();
+            pathSearchList.Enqueue(new(from, PlayerAction.Undefined, null), Utils.ManhattanDistance(from, to));
+
+            List<List<TileType>> auxMap = Utils.DuplicateMap(Map);
+            while (pathSearchList.Count > 0)
+            {
+                var head = pathSearchList.Dequeue();
+                if (head.Position.Item1 == to.Item1 && head.Position.Item2 == to.Item2) return head.GetActionChain().Count;
+
+                auxMap[head.Position.Item1][head.Position.Item2] = TileType.Blocked;
+
+                foreach (var action in new[] { PlayerAction.Up, PlayerAction.Down, PlayerAction.Left, PlayerAction.Right })
+                {
+                    var xyDelta = ActionToDeltas[action];
+                    int targetRow = head.Position.Item1 + xyDelta.Item1;
+                    int targetCol = head.Position.Item2 + xyDelta.Item2;
+
+                    if (IsOutside(targetRow, targetCol)) continue;
+                    if ((auxMap[targetRow][targetCol] & TileType.Blocked) > 0) continue;
+
+                    pathSearchList.Enqueue(new(new(targetRow, targetCol), action, head), Utils.ManhattanDistance(new(targetRow, targetCol), to));
+                    auxMap[targetRow][targetCol] = TileType.Blocked;
+                }
+            }
+            return int.MaxValue;
         }
 
         /// <summary>

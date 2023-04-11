@@ -30,10 +30,11 @@ namespace SokobanDotNet
 
 		private PriorityQueue<SokobanGame, int> SearchList;
 		private List<SokobanGame> SearchedNodes = new();
-
 		public Stopwatch Watch = new();
 
         SokobanGame BaseGame;
+
+		List<List<int>> BareMapToHoleDistances = new();
 
         public GameSolver(SokobanGame game)
 		{
@@ -41,6 +42,8 @@ namespace SokobanDotNet
             DistIndexPermutations = Utils.Permute(game.StoneLocations.Count);
 			SearchList = new();
 			AppendToSearchList(BaseGame);
+			PreComputeHeuristics();
+
         }
 
 		private void AppendToSearchList(SokobanGame game)
@@ -67,6 +70,21 @@ namespace SokobanDotNet
 
 		public int PairedTargetManhattanDistance(ref SokobanGame game) => game.StoneLocations.Zip(game.HoleLocations, (b, h) => Utils.ManhattanDistance(b, h)).Sum();
 
+		public void PreComputeHeuristics()
+		{
+			BareMapToHoleDistances = new();
+			for (int r = 0; r < BaseGame.Height; r++)
+			{
+				List<int> RowDistances = new();
+				for (int c = 0; c < BaseGame.Width; c++)
+				{
+					if ((BaseGame.Map[r][c] & TileType.Blocked) > 0) RowDistances.Add(int.MaxValue);
+					else RowDistances.Add(BaseGame.HoleLocations.ConvertAll(location => BaseGame.PlanPathOnBareMap(new(r, c), location)).Min());
+				}
+				BareMapToHoleDistances.Add(RowDistances);
+			}
+		}
+
         public List<PlayerAction> SolveGame()
 		{
             Watch = new Stopwatch();
@@ -88,7 +106,6 @@ namespace SokobanDotNet
                         return child.GetActionChain();
                     }
                     if (!SearchedNodes.Any(game => game.Equals(child))) AppendToSearchList(child);
-                    //AppendToSearchList(child);
                 }
             }
 
