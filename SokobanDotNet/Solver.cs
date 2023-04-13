@@ -8,11 +8,13 @@ namespace SokobanDotNet
 		public Tuple<int, int> Position;
         public PlayerAction LastAction;
 		public PlannerNode? LastNode;
+		public int StepsCount;
 		public PlannerNode(Tuple<int, int> position, PlayerAction lastAction, PlannerNode? lastNode)
 		{
 			Position = position;
 			LastAction = lastAction;
 			LastNode = lastNode;
+			StepsCount = lastNode is null ? 0 : lastNode.StepsCount + 1;
 		}
 
 		public List<PlayerAction> GetActionChain()
@@ -24,13 +26,35 @@ namespace SokobanDotNet
 		}
 	}
 
+	//internal class GameGenerator
+	//{
+	//	public SokobanGame GenerateGame(int hMap, int wMap, int nStones, int nMaxAdditionalBlocks)
+	//	{
+	//		List<List<TileType>> map = new();
+	//		for (int h = 0; h < hMap; h++)
+	//		{
+	//			List<TileType> row = new();
+	//			for (int w = 0; w < wMap; w++)
+	//			{
+	//				if (h == 0 || w == 0 || h == hMap-1 || w == wMap - 1) row.Add(TileType.Blocked);
+	//				else row.Add(TileType.Ground);
+	//			}
+	//			map.Add(row);
+	//		}
+
+	//		return new SokobanGame();
+	//	}
+	//}
+
 	internal class GameSolver
 	{
 		private List<List<int>> DistIndexPermutations;
 
 		private PriorityQueue<SokobanGame, int> SearchList;
 		private List<SokobanGame> SearchedNodes = new();
-		public Stopwatch Watch = new();
+		//private PriorityQueue<SokobanGame, int> SearchedNodes = new();
+
+        public Stopwatch Watch = new();
 
         SokobanGame BaseGame;
 
@@ -43,15 +67,16 @@ namespace SokobanDotNet
 			SearchList = new();
 			AppendToSearchList(BaseGame);
 			PreComputeHeuristics();
-
         }
 
 		private void AppendToSearchList(SokobanGame game)
 		{
-			int heuristicValue = (game.PairedTarget ? TargetManhattanDistance(ref game) : PairedTargetManhattanDistance(ref game)) + game.Cost;
-            //Console.WriteLine("Current h = " + heuristicValue.ToString() + ". Current step = " + game.StepsCount.ToString() + ".");
-            SearchedNodes.Add(game);
-            SearchList.Enqueue(game, heuristicValue);
+
+            //int fx = (game.PairedTarget ? PairedTargetManhattanDistance(ref game) : TargetManhattanDistance(ref game));
+			int fx = (game.PairedTarget ? PairedTargetManhattanDistance(ref game) : TargetManhattanDistance(ref game)) + game.Cost;
+			//SearchedNodes.Enqueue(game, fx);
+			SearchedNodes.Add(game);
+            SearchList.Enqueue(game, fx);
         }
 
         public int TargetManhattanDistance(ref SokobanGame game)
@@ -65,10 +90,29 @@ namespace SokobanDotNet
                 dist = dist < manhattanDists ? dist : manhattanDists;
             }
 
+            return dist;
+        }
+
+
+        public int MininalTargetManhattanDistance(ref SokobanGame game)
+        {
+            int manhattanDists = 0;
+			int _dist = 0;
+
+			foreach (var sLoc in game.StoneLocations)
+			{
+				int sMD = int.MaxValue;
+                foreach (var hLoc in game.HoleLocations)
+				{
+                    _dist = Math.Abs(sLoc.Item1 - hLoc.Item1) + Math.Abs(sLoc.Item2 - hLoc.Item2);
+					if (_dist < sMD) sMD = _dist;
+				}
+				manhattanDists += _dist;
+			}
             return manhattanDists;
         }
 
-		public int PairedTargetManhattanDistance(ref SokobanGame game) => game.StoneLocations.Zip(game.HoleLocations, (b, h) => Utils.ManhattanDistance(b, h)).Sum();
+        public int PairedTargetManhattanDistance(ref SokobanGame game) => game.StoneLocations.Zip(game.HoleLocations, (b, h) => Utils.ManhattanDistance(b, h)).Sum();
 
 		public void PreComputeHeuristics()
 		{
@@ -91,21 +135,25 @@ namespace SokobanDotNet
             Watch.Start();
             while (SearchList.Count > 0)
 			{
-				var head = SearchList.Dequeue();
+				SokobanGame head = SearchList.Dequeue();
 
 				//Console.Clear();
 				//Console.WriteLine(head.ToString());
+				//Console.WriteLine(TargetManhattanDistance(ref head));
+				//Console.WriteLine(head.StepsCount);
 
-				var childrenGames = head.ExecutePossibleActions();
+                List<SokobanGame> childrenGames = head.ExecutePossibleActions();
 
-				foreach (var child in childrenGames)
+				foreach (SokobanGame child in childrenGames)
 				{
 					if (child.CheckWin())
 					{
                         Watch.Stop();
                         return child.GetActionChain();
                     }
-                    if (!SearchedNodes.Any(game => game.Equals(child))) AppendToSearchList(child);
+
+					if (!SearchedNodes.Any(game => game.EqualsTo(child))) AppendToSearchList(child);
+					//else Console.WriteLine("DEBUG: Found visited state!");
                 }
             }
 

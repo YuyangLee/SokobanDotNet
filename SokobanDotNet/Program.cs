@@ -2,9 +2,11 @@
 
 try
 {
-    Console.WriteLine("==== LOAD MAP DATA FROM FILE ====");
-    Console.Write("Load from file: ");
-    string? gameFilePath = Console.ReadLine();
+    //Console.WriteLine("==== LOAD MAP DATA FROM FILE ====");
+    //Console.Write("Load from file: ");
+    //string? gameFilePath = Console.ReadLine();
+
+    string gameFilePath = "/Users/aiden/dev/SokobanDotNet/Data/Maps/BASE.txt";
 
     if (gameFilePath is null || !File.Exists(gameFilePath))
     {
