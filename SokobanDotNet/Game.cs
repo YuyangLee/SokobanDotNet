@@ -67,13 +67,14 @@ namespace SokobanDotNet
 
         public int Cost { get => StepsCount; }
 
-        public int HashCode = 0;
+        public int HashCode { get { return _HashCode is null ? GetHash() : (int)_HashCode; } }
 
-        public int GetHash(bool Update = true)
+        private int? _HashCode = null;
+
+        public int GetHash()
         {
-            int hash = StoneLocations.Sum(tuple => (tuple.Item1 << 4) + tuple.Item2) + PlayerRow << 4 + PlayerCol;
-            if (Update) HashCode = hash;
-            return HashCode;
+            int hash = StoneLocations.Sum(tuple => (tuple.Item1 << 4) + tuple.Item2) + (PlayerRow << 4) + PlayerCol;
+            return hash;
         }
 
         public static Dictionary<PlayerAction, Tuple<int, int>> ActionToDeltas = new()
@@ -87,7 +88,7 @@ namespace SokobanDotNet
         /// <summary>
         /// Player position.
         /// </summary>
-        private int PlayerCol = -1, PlayerRow = -1;
+        public int PlayerCol = -1, PlayerRow = -1;
 
         /// <summary>
         /// Check whether a game is solvable.
@@ -159,13 +160,13 @@ namespace SokobanDotNet
                     if (movedAndPushedGame is not null && !movedAndPushedGame.HasStuck())
                     {
                         possibleGames.Add(movedAndPushedGame);
-                        while (true)
-                        {
-                            movedAndPushedGame = new(movedAndPushedGame);
-                            var res = movedAndPushedGame.Move(action);
-                            if ((res & MoveResult.Success) > 0 && !movedAndPushedGame.HasStuck()) possibleGames.Add(movedAndPushedGame);
-                            else break;
-                        }
+                        //while (true)
+                        //{
+                        //    movedAndPushedGame = new(movedAndPushedGame);
+                        //    var res = movedAndPushedGame.Move(action);
+                        //    if ((res & MoveResult.Success) > 0 && !movedAndPushedGame.HasStuck()) possibleGames.Add(movedAndPushedGame);
+                        //    else break;
+                        //}
                     }
                 }
             }
@@ -584,7 +585,7 @@ namespace SokobanDotNet
         /// Should trade-off between computation efficiency and trimming amout.
         /// </summary>
         /// <returns>Whether the game is definitely stuck.</returns>
-        private bool HasStuck()
+        public bool HasStuck()
         {
             // In a valid map, the stone will not be on the boarder, so no boarder check is needed.
             for (int i = 0; i<StoneLocations.Count; i++)
@@ -620,7 +621,7 @@ public void ShowResult(Tuple<List<PlayerAction>, long> res)
                 Console.WriteLine($"Showing solution with { i } / {actions.Count} steps.");
                 Console.WriteLine($"Actions: { actionString }. Searching used {timeUsed} ms.");
 
-                Thread.Sleep(500);
+                Thread.Sleep(250);
             }
         }
 
@@ -671,6 +672,29 @@ public void ShowResult(Tuple<List<PlayerAction>, long> res)
         /// </summary>
         /// <param name="MapData"></param>
         public SokobanGame(string[] MapData, int[]? targetPairingIndices) => ParseMapFromStrings(MapData, targetPairingIndices);
+
+        public SokobanGame(List<List<TileType>> map)
+        {
+            Map = Utils.DuplicateMap(map);
+            Height = map.Count;
+            Width = map[0].Count;
+
+            _HoleLocations = new();
+            _StoneLocations = new();
+
+            for (int i = 0; i < Height; i++)
+            {
+                for (int j = 0; j < Width; j++)
+                {
+                    if (map[i][j] == (TileType.Ground | TileType.Stone)) _StoneLocations.Add(new(i, j));
+                    if (map[i][j] == (TileType.Ground | TileType.Player)) { PlayerRow = i; PlayerCol = j; }
+                    if (map[i][j] == (TileType.Hole)) _HoleLocations.Add(new(i, j));
+                }
+            }
+
+            ParentGame = null;
+            StepsCount = 0;
+        }
 
         /// <summary>
         /// Build a child game.

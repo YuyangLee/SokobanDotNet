@@ -16,7 +16,7 @@ dotnet restore && dotnet build
 
 #### 加载关卡
 
-游戏启动后，通过路径指定关卡。
+游戏启动后，通过路径指定关卡。留空进入随机生成模式（见下文）。
 
 ![Load from file](Assets/LoadFromFile.png)
 
@@ -50,11 +50,11 @@ dotnet restore && dotnet build
 
 <img src="Assets/GameUI.png" alt="Game UI" style="zoom:50%;" />
 
-通过方向键移动，`Q` 退出游戏，`R` 重置游戏，`S` 启动搜索算法从当前状态搜索解。将石头推入洞口后该位置的"口"变为"回"。将所有石头推入洞口即可获胜。
+通过方向键移动，`Q` 退出游戏，`R` 重置游戏，`S` 启动搜索算法**从当前状态搜索解（可以进行一些步骤的游玩后开始搜索）**。将石头推入洞口后该位置的"口"变为"回"。将所有石头推入洞口即可获胜。
 
 <img src="Assets/GameWon.png" alt="Game won" style="zoom:50%;" />
 
-#### 关卡设计
+#### 手动关卡设计
 
 打开 `Data/Maps/Template.xlsx` 可通过 Excel 设计关卡，数值同上表，颜色会被自动应用。
 
@@ -67,6 +67,28 @@ python csv2txt.py --in_file PATH_TO_CSV_FILE
 ```
 
 文件会被保存在同目录下的同名 TXT 文档中。启动游戏时加载该文件即可。
+
+#### 自动关卡设计
+
+在输入路径时留空进入随机地图生成模式。按照要求分别输入地图的尺寸、石头的数量即可。
+
+![Generate](Assets\Generate.png)
+
+由于并没有简易的显式算法生成地图，我们采用随机生成并通过搜索确定可解性的方式建图。将地图最外围设置成墙壁后，我们从起始状态开始，采用下面的转移概率，依次设置格子：
+
+| 上一状态 | 砖头 | 地面 |
+| -------- | ---- | ---- |
+| 起始     | 0.5  | 0.5  |
+| 砖头     | 0.4  | 0.6  |
+| 地面     | 0.4  | 0.6  |
+
+对于每个生成的地图，程序为之搜索解。程序会自动排除无法求解的问题、求解超过 20 min 的问题。接受一个解后，开始游戏：
+
+![Generated](Assets\Generated.png)
+
+此时可以按 S 开始搜索并执行答案：
+
+![Generated.Searched](Assets\Generated.Searched.png)
 
 ## 问题建模（Baseline）
 
@@ -86,7 +108,11 @@ python csv2txt.py --in_file PATH_TO_CSV_FILE
 
 ### 问题求解
 
-针对这个场景，可以使用 A* 算法搜索。我们使用 Manhattan Distance 作为启发函数。对于石头、洞口一一对应的情景，只需计算对应石头与洞口的 Manhattan Distance 并求和
+针对这个场景，可以使用 A* 算法搜索。
+
+#### Goal-Manhattan-Distance as $h(s)$
+
+可以使用距离目标的 Manhattan Distance 作为启发函数。对于石头、洞口一一对应的情景，只需计算对应石头与洞口的 Manhattan Distance 并求和
 $$
 h(s) = \sum_{i=1}^N \left( \vert h^{(i)}_s - h^{(i)}_h \vert + \vert w^{(i)}_s - w^{(i)}_h \vert \right)
 $$
@@ -94,6 +120,18 @@ $$
 $$
 h(s) = \min_\pi \sum_{i=1}^N \left( \vert h^{(i)}_s - h^{(\pi(i))}_h \vert + \vert w^{(i)}_s - w^{(\pi(i))}_h \vert \right)
 $$
+#### Greedy-Manhattan-Distance as $h(s)$
+
+为了避免计算 $A_N^N$ 次 Manhattan Distance，可以采用贪婪的 Manhattan Distance：对每个石头到达最近洞口的 Manhattan Distance 求和即可。
+
+#### Estimated Geodesic Distance as $h(s)$
+
+可以采用近似的 Path Distance 作为启发函数。预先计算好场景中不含石头时，任意一点到最近（某个）洞口的路径距离；在搜索时采用该距离可以获得更好的代价估计。
+
+
+
+容易证明，上述启发函数都是可采纳的。
+
 采用如下的 A* 算法即可进行搜索：
 
 1. 初始化状态 $s_0$、$g(s_0) = 0$、优先队列 $Q$、闭节点列表 $C$
@@ -107,7 +145,7 @@ $$
    4. 列举 $s$ 的可行操作集 $a_s$
    5. 对所有 $a \in a_s$
       1. 对 $s$ 执行 $a$ 得到 $s_a$
-      2. 如果 $s_a \in C$ 则跳过此 $a$
+      2. 如果 $s_a \in C$ 且 $s_a$ 的 cost 比 $C$ 中的匹配项更高，则跳过此 $a$
       3. $g(s_a) = g(s) + 1$
       4. $s_a$ 加入 $Q$，优先级系数为 $h(s_a) + g(s_a)$
 4. 返回 $\empty$
@@ -125,3 +163,25 @@ $$
 
 采用和 baseline 一样的 A* 算法求解。
 
+### 算法加速
+
+#### 剪枝
+
+剪枝是搜索算法的重要加速方法。在本次项目中，我们剪去：
+
+- 石头卡死：
+  - 石头没有到达洞口，且其任意相邻两条边对应邻格（如上、右）均为障碍物
+    - 依次判断四组相邻位置即可
+  - 石头没有到达洞口，且其位于一个凹形障碍物区域边缘，无法从障碍物侧推出，并因此永远无法到达目标
+    - 可以提前根据地图计算“死区”，剪去有石头进入死区的结点
+
+#### 闭节点集合
+
+随着搜索进行，闭节点集合将会迅速增长，判断子状态是否处于其中需要遍历整个列表，此过程逐渐变慢。可以通过使用 PriorityQueue 和 HashTable 来加速闭节点集合的搜索。本次项目中，我们采用 `Dictionary<int, List<SokobanGame>>` 为不同 Hash 值得游戏维护各自的列表。给定石头坐标 $(x_i, y_i)$、玩家坐标 $(x, y)$，游戏Hash 值计算方法为：
+$$
+H = \sum_{i=1}^{N_s}2^4 x_i + 2^4x + y_i + y
+$$
+
+## 样例结果
+
+在测试样例上，采用 Release 模式编译可执行程序，在 Core i7-10875H （2.30GHz） 平台上搜索用时1308s，答案为 87 步骤。
