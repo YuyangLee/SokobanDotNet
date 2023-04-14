@@ -51,8 +51,9 @@ namespace SokobanDotNet
 		private List<List<int>> DistIndexPermutations;
 
 		private PriorityQueue<SokobanGame, int> SearchList;
-		private List<SokobanGame> SearchedNodes = new();
+		//private List<SokobanGame> SearchedNodes = new();
 		//private PriorityQueue<SokobanGame, int> SearchedNodes = new();
+		private Dictionary<int, List<SokobanGame>> SearchedNodesByH = new();
 
         public Stopwatch Watch = new();
 
@@ -72,11 +73,16 @@ namespace SokobanDotNet
 		private void AppendToSearchList(SokobanGame game)
 		{
 
-            //int fx = (game.PairedTarget ? PairedTargetManhattanDistance(ref game) : TargetManhattanDistance(ref game));
+			//int fx = (game.PairedTarget ? PairedTargetManhattanDistance(ref game) : TargetManhattanDistance(ref game));
 			int fx = (game.PairedTarget ? PairedTargetManhattanDistance(ref game) : TargetManhattanDistance(ref game)) + game.Cost;
-			//SearchedNodes.Enqueue(game, fx);
-			SearchedNodes.Add(game);
-            SearchList.Enqueue(game, fx);
+			//int fx = (game.PairedTarget ? PairedTargetManhattanDistance(ref game) : MininalTargetManhattanDistance(ref game)) + game.Cost;
+			//int fx = (game.PairedTarget ? PairedTargetManhattanDistance(ref game) : PreComputedPathDistance(ref game)) + game.Cost;
+            //SearchedNodes.Enqueue(game, fx);
+            //SearchedNodes.Add(game);
+            int gameHashVal = game.HashCode;
+			if (SearchedNodesByH.ContainsKey(gameHashVal)) SearchedNodesByH[gameHashVal].Add(game);
+			else SearchedNodesByH[gameHashVal] = new() { game };
+			SearchList.Enqueue(game, fx);
         }
 
         public int TargetManhattanDistance(ref SokobanGame game)
@@ -93,24 +99,25 @@ namespace SokobanDotNet
             return dist;
         }
 
-
         public int MininalTargetManhattanDistance(ref SokobanGame game)
         {
             int manhattanDists = 0;
-			int _dist = 0;
+            int _dist = 0;
 
-			foreach (var sLoc in game.StoneLocations)
-			{
-				int sMD = int.MaxValue;
+            foreach (var sLoc in game.StoneLocations)
+            {
+                int sMD = int.MaxValue;
                 foreach (var hLoc in game.HoleLocations)
-				{
+                {
                     _dist = Math.Abs(sLoc.Item1 - hLoc.Item1) + Math.Abs(sLoc.Item2 - hLoc.Item2);
-					if (_dist < sMD) sMD = _dist;
-				}
-				manhattanDists += _dist;
-			}
+                    if (_dist < sMD) sMD = _dist;
+                }
+                manhattanDists += sMD;
+            }
             return manhattanDists;
         }
+
+		public int PreComputedPathDistance(ref SokobanGame game) => game.StoneLocations.Sum(item => BareMapToHoleDistances[item.Item1][item.Item2]);
 
         public int PairedTargetManhattanDistance(ref SokobanGame game) => game.StoneLocations.Zip(game.HoleLocations, (b, h) => Utils.ManhattanDistance(b, h)).Sum();
 
@@ -127,6 +134,14 @@ namespace SokobanDotNet
 				}
 				BareMapToHoleDistances.Add(RowDistances);
 			}
+			return;
+		}
+
+		private bool IsSearched(SokobanGame game)
+		{
+			int hVal = game.GetHash(true);
+			if (!SearchedNodesByH.ContainsKey(hVal)) return false;
+			return SearchedNodesByH[hVal].Any(searchedGame => searchedGame.EqualsTo(game));
 		}
 
         public List<PlayerAction> SolveGame()
@@ -137,10 +152,10 @@ namespace SokobanDotNet
 			{
 				SokobanGame head = SearchList.Dequeue();
 
-				//Console.Clear();
-				//Console.WriteLine(head.ToString());
-				//Console.WriteLine(TargetManhattanDistance(ref head));
-				//Console.WriteLine(head.StepsCount);
+				Console.Clear();
+				Console.WriteLine(head.ToString());
+				Console.WriteLine(TargetManhattanDistance(ref head));
+				Console.WriteLine(head.StepsCount);
 
                 List<SokobanGame> childrenGames = head.ExecutePossibleActions();
 
@@ -152,8 +167,9 @@ namespace SokobanDotNet
                         return child.GetActionChain();
                     }
 
-					if (!SearchedNodes.Any(game => game.EqualsTo(child))) AppendToSearchList(child);
+					//if (!SearchedNodes.Any(game => game.EqualsTo(child))) AppendToSearchList(child);
 					//else Console.WriteLine("DEBUG: Found visited state!");
+					if (!IsSearched(child)) AppendToSearchList(child);
                 }
             }
 

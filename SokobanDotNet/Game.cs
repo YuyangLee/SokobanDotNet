@@ -67,6 +67,15 @@ namespace SokobanDotNet
 
         public int Cost { get => StepsCount; }
 
+        public int HashCode = 0;
+
+        public int GetHash(bool Update = true)
+        {
+            int hash = StoneLocations.Sum(tuple => (tuple.Item1 << 4) + tuple.Item2) + PlayerRow << 4 + PlayerCol;
+            if (Update) HashCode = hash;
+            return HashCode;
+        }
+
         public static Dictionary<PlayerAction, Tuple<int, int>> ActionToDeltas = new()
         {
             { PlayerAction.Up,      new( -1,  0 ) },
@@ -101,7 +110,14 @@ namespace SokobanDotNet
         public bool EqualsTo(SokobanGame game)
         {
             if (game.PlayerCol != PlayerCol || game.PlayerRow != PlayerRow) return false;
-            for (int i = 0; i < StoneLocations.Count; i++) if ((game.StoneLocations[i].Item1 != StoneLocations[i].Item1) || game.StoneLocations[i].Item2 != StoneLocations[i].Item2) return false;
+            if (PairedTarget)
+            {
+                for (int i = 0; i < StoneLocations.Count; i++) if ((game.StoneLocations[i].Item1 != StoneLocations[i].Item1) || game.StoneLocations[i].Item2 != StoneLocations[i].Item2) return false;
+            }
+            else
+            {
+                foreach (var location in StoneLocations) if ((game.Map[location.Item1][location.Item2] & TileType.Stone) == 0) return false;
+            }
 
             return true;
         }
@@ -143,13 +159,13 @@ namespace SokobanDotNet
                     if (movedAndPushedGame is not null && !movedAndPushedGame.HasStuck())
                     {
                         possibleGames.Add(movedAndPushedGame);
-                        //while (true)
-                        //{
-                        //    movedAndPushedGame = new(movedAndPushedGame);
-                        //    var res = movedAndPushedGame.Move(action);
-                        //    if ((res & MoveResult.Success) > 0 && !movedAndPushedGame.HasStuck()) possibleGames.Add(movedAndPushedGame);
-                        //    else break;
-                        //}
+                        while (true)
+                        {
+                            movedAndPushedGame = new(movedAndPushedGame);
+                            var res = movedAndPushedGame.Move(action);
+                            if ((res & MoveResult.Success) > 0 && !movedAndPushedGame.HasStuck()) possibleGames.Add(movedAndPushedGame);
+                            else break;
+                        }
                     }
                 }
             }
