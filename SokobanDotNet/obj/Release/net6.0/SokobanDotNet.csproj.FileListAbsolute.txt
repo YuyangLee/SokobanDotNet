@@ -1,0 +1,15 @@
+E:\Dev\SokobanDotNet\SokobanDotNet\bin\Release\net6.0\SokobanDotNet.exe
+E:\Dev\SokobanDotNet\SokobanDotNet\bin\Release\net6.0\SokobanDotNet.deps.json
+E:\Dev\SokobanDotNet\SokobanDotNet\bin\Release\net6.0\SokobanDotNet.runtimeconfig.json
+E:\Dev\SokobanDotNet\SokobanDotNet\bin\Release\net6.0\SokobanDotNet.dll
+E:\Dev\SokobanDotNet\SokobanDotNet\bin\Release\net6.0\SokobanDotNet.pdb
+E:\Dev\SokobanDotNet\SokobanDotNet\obj\Release\net6.0\SokobanDotNet.csproj.AssemblyReference.cache
+E:\Dev\SokobanDotNet\SokobanDotNet\obj\Release\net6.0\SokobanDotNet.GeneratedMSBuildEditorConfig.editorconfig
+E:\Dev\SokobanDotNet\SokobanDotNet\obj\Release\net6.0\SokobanDotNet.AssemblyInfoInputs.cache
+E:\Dev\SokobanDotNet\SokobanDotNet\obj\Release\net6.0\SokobanDotNet.AssemblyInfo.cs
+E:\Dev\SokobanDotNet\SokobanDotNet\obj\Release\net6.0\SokobanDotNet.csproj.CoreCompileInputs.cache
+E:\Dev\SokobanDotNet\SokobanDotNet\obj\Release\net6.0\SokobanDotNet.dll
+E:\Dev\SokobanDotNet\SokobanDotNet\obj\Release\net6.0\refint\SokobanDotNet.dll
+E:\Dev\SokobanDotNet\SokobanDotNet\obj\Release\net6.0\SokobanDotNet.pdb
+E:\Dev\SokobanDotNet\SokobanDotNet\obj\Release\net6.0\SokobanDotNet.genruntimeconfig.cache
+E:\Dev\SokobanDotNet\SokobanDotNet\obj\Release\net6.0\ref\SokobanDotNet.dll

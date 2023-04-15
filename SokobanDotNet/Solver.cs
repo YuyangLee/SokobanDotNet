@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Diagnostics;
+
 namespace SokobanDotNet
 {
 	internal class PlannerNode
@@ -6,11 +8,13 @@ namespace SokobanDotNet
 		public Tuple<int, int> Position;
         public PlayerAction LastAction;
 		public PlannerNode? LastNode;
+		public int StepsCount;
 		public PlannerNode(Tuple<int, int> position, PlayerAction lastAction, PlannerNode? lastNode)
 		{
 			Position = position;
 			LastAction = lastAction;
 			LastNode = lastNode;
+			StepsCount = lastNode is null ? 0 : lastNode.StepsCount + 1;
 		}
 
 		public List<PlayerAction> GetActionChain()
@@ -27,34 +31,113 @@ namespace SokobanDotNet
 		private List<List<int>> DistIndexPermutations;
 
 		private PriorityQueue<SokobanGame, int> SearchList;
-		private List<SokobanGame> SearchedNodes = new();
+		//private List<SokobanGame> SearchedNodes = new();
+		//private PriorityQueue<SokobanGame, int> SearchedNodes = new();
+		private Dictionary<int, List<SokobanGame>> SearchedNodesByH = new();
 
-        private static PlayerAction[] UserActions = { PlayerAction.Up, PlayerAction.Down, PlayerAction.Left, PlayerAction.Right };
+		private List<int> DeadRows, DeadCols;
 
-		SokobanGame BaseGame;
+        public Stopwatch Watch = new();
+
+        SokobanGame BaseGame;
+
+		List<List<int>> BareMapToHoleDistances = new();
 
         public GameSolver(SokobanGame game)
 		{
 			BaseGame = new(game);
-            DistIndexPermutations = Utils.Permute(game.BoxLocations.Count);
+            DistIndexPermutations = Utils.Permute(game.StoneLocations.Count);
 			SearchList = new();
+			PreComputeHeuristics();
 			AppendToSearchList(BaseGame);
+			var deads = DeadRowsAndCols(game.Map, game.HoleLocations);
+			DeadRows = deads.Item1;
+			DeadCols = deads.Item2;
         }
 
-		public List<PlayerAction> PathPlanning(SokobanGame game, Tuple<int, int> fromLocation, Tuple<int, int> toLocation)
+		public bool IsSolvable()
 		{
-			List<PlayerAction> actions = new();
+            foreach (var sLoc in BaseGame.StoneLocations)
+            {
+                if (BareMapToHoleDistances[sLoc.Item1][sLoc.Item2] > BaseGame.Height * BaseGame.Width) return false;
+            }
 
-			return actions;
+            foreach (var hLoc in BaseGame.HoleLocations)
+            {
+                if (BareMapToHoleDistances[hLoc.Item1][hLoc.Item2] > BaseGame.Height * BaseGame.Width) return false;
+            }
+
+            if (BareMapToHoleDistances[BaseGame.PlayerRow][BaseGame.PlayerCol] > BaseGame.Height * BaseGame.Width) return false;
+
+
+            // TODO: Add more rules.
+            return true;
 		}
 
-		private void AppendToSearchList(SokobanGame game)
+		public Tuple<int, int, int, int> HolesBoundingBox(List<Tuple<int, int>> holeLocs) => new (holeLocs.Min(x => x.Item1), holeLocs.Min(x => x.Item2), holeLocs.Max(x => x.Item1), holeLocs.Max(x => x.Item2));
+
+		public Tuple<List<int>, List<int>> DeadRowsAndCols(List<List<TileType>> map, List<Tuple<int, int>> holeLocs)
 		{
-			int heuristicValue = TargetManhattanDistance(ref game) + game.Cost;
-			//int heuristicValue = TargetManhattanDistance(ref game) + game.StepsCount;
-            //Console.WriteLine("Current h = " + heuristicValue.ToString() + ". Current step = " + game.StepsCount.ToString() + ".");
-            SearchedNodes.Add(game);
-            SearchList.Enqueue(game, heuristicValue);
+			List<int> deadRows = new(), deadCols = new();
+
+			var bb = HolesBoundingBox(holeLocs);
+            for (int i = 0; i < map.Count; i++)
+            {
+                if (i < bb.Item1 - 1)
+                {
+					int j;
+                    for (j = 0; j < map[0].Count; j++) if ((map[i][j] & TileType.Blocked) == 0) break;
+                    if (j == map[0].Count) deadRows.Add(i + 1);
+                }
+
+                if (i > bb.Item3 + 1)
+                {
+					int j;
+                    for (j = 0; j < map[0].Count; j++) if ((map[i][j] & TileType.Blocked) == 0) break;
+                    if (j == map[0].Count) deadRows.Add(i - 1);
+                }
+            }
+
+
+            for (int j = 0; j < map[0].Count; j++)
+            {
+                if (j < bb.Item2 - 1)
+                {
+					int i;
+                    for (i = 0; i < map.Count; i++) if ((map[i][j] & TileType.Blocked) == 0) break;
+                    if (i == map.Count) deadCols.Add(j + 1);
+                }
+
+                if (j > bb.Item4 + 1)
+                {
+					int i;
+                    for (i = 0; i < map.Count; i++) if ((map[i][j] & TileType.Blocked) == 0) break;
+                    if (i == map.Count) deadCols.Add(j - 1);
+                }
+            }
+
+            return new(deadRows, deadCols);
+		}
+
+		private bool AppendToSearchList(SokobanGame game)
+		{
+			int hx = PreComputedPathDistance(ref game);
+			//int fx = (game.PairedTarget ? PairedTargetManhattanDistance(ref game) : TargetManhattanDistance(ref game));
+			//int fx = (game.PairedTarget ? PairedTargetManhattanDistance(ref game) : TargetManhattanDistance(ref game)) + game.Cost;
+			//int fx = (game.PairedTarget ? PairedTargetManhattanDistance(ref game) : MininalTargetManhattanDistance(ref game)) + game.Cost;
+			if (hx == -1)
+			{
+                SearchList = new();
+				return false;
+            }
+			int fx = (game.PairedTarget ? PairedTargetManhattanDistance(ref game) : PreComputedPathDistance(ref game)) + game.Cost;
+			//SearchedNodes.Enqueue(game, fx);
+			//SearchedNodes.Add(game);
+			int gameHashVal = game.HashCode;
+			if (SearchedNodesByH.ContainsKey(gameHashVal)) SearchedNodesByH[gameHashVal].Add(game);
+			else SearchedNodesByH[gameHashVal] = new() { game };
+			SearchList.Enqueue(game, fx);
+			return true;
         }
 
         public int TargetManhattanDistance(ref SokobanGame game)
@@ -64,38 +147,131 @@ namespace SokobanDotNet
             foreach (var indices in DistIndexPermutations)
             {
                 manhattanDists = 0;
-                for (int i = 0; i < game.BoxLocations.Count; i++) manhattanDists += Math.Abs(game.BoxLocations[i].Item1 - game.HoleLocations[indices[i]].Item1) + Math.Abs(game.BoxLocations[i].Item2 - game.HoleLocations[indices[i]].Item2);
+                for (int i = 0; i < game.StoneLocations.Count; i++) manhattanDists += Math.Abs(game.StoneLocations[i].Item1 - game.HoleLocations[indices[i]].Item1) + Math.Abs(game.StoneLocations[i].Item2 - game.HoleLocations[indices[i]].Item2);
                 dist = dist < manhattanDists ? dist : manhattanDists;
             }
 
+            return dist;
+        }
+
+        public int MininalTargetManhattanDistance(ref SokobanGame game)
+        {
+            int manhattanDists = 0;
+            int _dist = 0;
+
+            foreach (var sLoc in game.StoneLocations)
+            {
+                int sMD = int.MaxValue;
+                foreach (var hLoc in game.HoleLocations)
+                {
+                    _dist = Math.Abs(sLoc.Item1 - hLoc.Item1) + Math.Abs(sLoc.Item2 - hLoc.Item2);
+                    if (_dist < sMD) sMD = _dist;
+                }
+                manhattanDists += sMD;
+            }
             return manhattanDists;
         }
 
-		public int PairedTargetManhattanDistance(ref SokobanGame game) => game.BoxLocations.Zip(game.HoleLocations, (b, h) => Utils.ManhattanDistance(b, h)).Sum();
-
-        public List<PlayerAction> SolveGame()
+		public int PreComputedPathDistance(ref SokobanGame game)
 		{
-			while (SearchList.Count > 0)
+			try
 			{
-				var head = SearchList.Dequeue();
+                return game.StoneLocations.Sum(item => BareMapToHoleDistances[item.Item1][item.Item2]);
+            }
+			catch (System.OverflowException ex)
+			{
+				return -1;
+			}
+		}
+
+        public int PairedTargetManhattanDistance(ref SokobanGame game) => game.StoneLocations.Zip(game.HoleLocations, (b, h) => Utils.ManhattanDistance(b, h)).Sum();
+
+		public void PreComputeHeuristics()
+		{
+			BareMapToHoleDistances = new();
+			for (int r = 0; r < BaseGame.Height; r++)
+			{
+				List<int> RowDistances = new();
+				for (int c = 0; c < BaseGame.Width; c++)
+				{
+					if ((BaseGame.Map[r][c] & TileType.Blocked) > 0) RowDistances.Add(int.MaxValue);
+					else RowDistances.Add(BaseGame.HoleLocations.ConvertAll(location => BaseGame.PlanPathOnBareMap(new(r, c), location)).Min());
+				}
+				BareMapToHoleDistances.Add(RowDistances);
+			}
+			return;
+		}
+
+		private bool IsSearched(SokobanGame game)
+		{
+			int hVal = game.HashCode;
+			if (!SearchedNodesByH.ContainsKey(hVal)) return false;
+			//return SearchedNodesByH[hVal].Any(searchedGame => (searchedGame.StepsCount < game.StepsCount && searchedGame.EqualsTo(game)));
+			foreach (var searchedGame in SearchedNodesByH[hVal])
+			{
+				if (searchedGame.StepsCount >= game.StepsCount)
+				{
+					if (searchedGame.EqualsTo(game))
+					{
+						SearchedNodesByH[hVal].Remove(searchedGame);
+						return false;
+					}
+				}
+				else if (searchedGame.EqualsTo(game)) return true;
+				//if (searchedGame.EqualsTo(game)) return true;
+            }
+			return false;
+		}
+
+		public bool WillStuck(SokobanGame game)
+		{
+			foreach (var location in game.StoneLocations)
+			{
+				if (DeadRows.Any(item => location.Item1 == item)) return true;
+				if (DeadCols.Any(item => location.Item2 == item)) return true;
+			}
+			return false;
+		}
+
+        public List<PlayerAction> SolveGame(long MaxSearchSecs=3600)
+		{
+			long MaxSearchMS = MaxSearchSecs * 1000;
+            Watch = new Stopwatch();
+            Watch.Start();
+            while (SearchList.Count > 0)
+			{
+				if (Watch.ElapsedMilliseconds > MaxSearchMS)
+				{
+					Watch.Stop();
+                    return new();
+                }
+
+                SokobanGame head = SearchList.Dequeue();
 
 				//Console.Clear();
 				//Console.WriteLine(head.ToString());
+				//Console.WriteLine(TargetManhattanDistance(ref head));
+				//Console.WriteLine(head.StepsCount);
 
-				var childrenGames = head.ExecutePossibleActions();
+                List<SokobanGame> childrenGames = head.ExecutePossibleActions();
 
-				foreach (var child in childrenGames)
+				foreach (SokobanGame child in childrenGames)
 				{
 					if (child.CheckWin())
 					{
-                        var chain = child.GetActionChain();
-						return chain;
+                        Watch.Stop();
+                        return child.GetActionChain();
                     }
-					if (!SearchedNodes.Any(game => game.Equals(child))) AppendToSearchList(child);
-                    //AppendToSearchList(child);
+
+					if (!WillStuck(child) && !IsSearched(child))
+					{
+                        bool cont = AppendToSearchList(child);
+						if (!cont) break;
+                    }
                 }
             }
 
+            Watch.Stop();
 			return new();
 		}
 	}

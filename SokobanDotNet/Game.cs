@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -12,9 +14,10 @@ namespace SokobanDotNet
         Blocked = 1,
         Ground = 2,
         Hole = 4,
-        Box = 8,
+        Stone = 8,
         Player = 16,
-        Unstepable = TileType.Box | TileType.Blocked
+        Unstepable = TileType.Stone | TileType.Blocked,
+        Stepable = TileType.Ground | TileType.Hole
     }
 
     enum PlayerAction { Undefined, Transported, Left, Right, Up, Down }
@@ -41,25 +44,38 @@ namespace SokobanDotNet
         public int Height;
 
         private List<Tuple<int, int>> _HoleLocations = new();
-        private List<Tuple<int, int>> _BoxLocations = new();
+        private List<Tuple<int, int>> _StoneLocations = new();
 
         public List<Tuple<int, int>> HoleLocations { get => _HoleLocations; }
-        public List<Tuple<int, int>> BoxLocations { get => _BoxLocations; }
+        public List<Tuple<int, int>> StoneLocations { get => _StoneLocations; }
 
-        private SokobanGame? ParentGame = null;
+        public int NumStones { get => _StoneLocations.Count; }
+        public int NumHoles { get => _HoleLocations.Count; }
+
+        private readonly  SokobanGame? ParentGame = null;
 
         public int StepsCount = 0;
 
         /// <summary>
         /// Game map.
         /// </summary>
-        private List<List<TileType>> Map = new();
+        public List<List<TileType>> Map = new();
 
         private string[]? _MapData;
 
         private List<PlayerAction> LastPlayerActions = new();
 
-        public int Cost { get => LastPlayerActions.Count + StepsCount - 1; }
+        public int Cost { get => StepsCount; }
+
+        public int HashCode { get { return _HashCode is null ? GetHash() : (int)_HashCode; } }
+
+        private int? _HashCode = null;
+
+        public int GetHash()
+        {
+            int hash = StoneLocations.Sum(tuple => (tuple.Item1 << 4) + tuple.Item2) + (PlayerRow << 4) + PlayerCol;
+            return hash;
+        }
 
         public static Dictionary<PlayerAction, Tuple<int, int>> ActionToDeltas = new()
         {
@@ -72,14 +88,14 @@ namespace SokobanDotNet
         /// <summary>
         /// Player position.
         /// </summary>
-        private int PlayerCol = -1, PlayerRow = -1;
+        public int PlayerCol = -1, PlayerRow = -1;
 
         /// <summary>
         /// Check whether a game is solvable.
         /// </summary>
         /// <param name="game"></param>
         /// <returns></returns>
-        // TODO: Implement this
+        // TODO: Implement this. But maybe it's just not implementable without actually searching for solution ???
         public static bool IsSolvable(SokobanGame game) => true;
 
         private GameStatus Status = GameStatus.OnGoing;
@@ -90,21 +106,33 @@ namespace SokobanDotNet
                                               "  Push the stones \"o\" into the holes \"口\"! \n" +
                                               "===============================================\n";
 
-        public bool Equals(ref SokobanGame game)
+        public int[]? TargetPairingIndices = null;
+
+        public bool EqualsTo(SokobanGame game)
         {
             if (game.PlayerCol != PlayerCol || game.PlayerRow != PlayerRow) return false;
-            for (int i = 0; i < BoxLocations.Count; i++) if (game.BoxLocations[i] != BoxLocations[i]) return false;
+            if (PairedTarget)
+            {
+                for (int i = 0; i < StoneLocations.Count; i++) if ((game.StoneLocations[i].Item1 != StoneLocations[i].Item1) || game.StoneLocations[i].Item2 != StoneLocations[i].Item2) return false;
+            }
+            else
+            {
+                foreach (var location in StoneLocations) if ((game.Map[location.Item1][location.Item2] & TileType.Stone) == 0) return false;
+            }
 
             return true;
         }
 
+
+        public bool PairedTarget { get => TargetPairingIndices is not null; }
+
         public bool NotInChain(ref SokobanGame game)
         {
             //if (this == game) return false;
-            if (game.PlayerCol != PlayerCol || game.PlayerRow != PlayerRow) return ParentGame is null ? true : ParentGame.NotInChain(ref game);
-            for (int i = 0; i < BoxLocations.Count; i++)
+            if (game.PlayerCol != PlayerCol || game.PlayerRow != PlayerRow) return ParentGame is null || ParentGame.NotInChain(ref game);
+            for (int i = 0; i < StoneLocations.Count; i++)
             {
-                if (game.BoxLocations[i] != BoxLocations[i]) return ParentGame is null ? true : ParentGame.NotInChain(ref game);
+                if (game.StoneLocations[i] != StoneLocations[i]) return ParentGame is null || ParentGame.NotInChain(ref game);
             }
 
             return false;
@@ -113,77 +141,52 @@ namespace SokobanDotNet
         public List<SokobanGame> ExecutePossibleActions()
         {
             List<SokobanGame> possibleGames = new();
-            foreach (var location in BoxLocations)
+            foreach (var location in StoneLocations)
             {
                 foreach (var action in new[] { PlayerAction.Up, PlayerAction.Down, PlayerAction.Left, PlayerAction.Right })
                 {
                     var xyDelta = ActionToDeltas[action];
                     int targetRow = location.Item1 - xyDelta.Item1;
                     int targetCol = location.Item2 - xyDelta.Item2;
-                    int boxTargetRow = location.Item1 + xyDelta.Item1;
-                    int boxTargetCol = location.Item2 + xyDelta.Item2;
+                    int stoneTargetRow = location.Item1 + xyDelta.Item1;
+                    int stoneTargetCol = location.Item2 + xyDelta.Item2;
 
                     if ((Map[targetRow][targetCol] & TileType.Unstepable) > 0) continue;
-                    if ((Map[boxTargetRow][boxTargetCol] & TileType.Unstepable) > 0) continue;
+                    if ((Map[stoneTargetRow][stoneTargetCol] & TileType.Unstepable) > 0) continue;
 
-                    SokobanGame game = this.Birth();
+                    SokobanGame game = new(this);
 
                     var movedAndPushedGame = game.MoveToAndPush(new(targetRow, targetCol), action);
-                    if (movedAndPushedGame is not null && !movedAndPushedGame.HasStuck()) possibleGames.Add(movedAndPushedGame);
+                    if (movedAndPushedGame is not null && !movedAndPushedGame.HasStuck())
+                    {
+                        possibleGames.Add(movedAndPushedGame);
+                        //while (true)
+                        //{
+                        //    movedAndPushedGame = new(movedAndPushedGame);
+                        //    var res = movedAndPushedGame.Move(action);
+                        //    if ((res & MoveResult.Success) > 0 && !movedAndPushedGame.HasStuck()) possibleGames.Add(movedAndPushedGame);
+                        //    else break;
+                        //}
+                    }
                 }
             }
-
-            //foreach(var action in new [] { PlayerAction.Up, PlayerAction.Down, PlayerAction.Left, PlayerAction.Right })
-            //{
-            //    SokobanGame movedGame = Birth();
-            //    if (((movedGame.Move(action) & MoveResult.Success) > 0) && !movedGame.HasStuck())
-            //    {
-            //        possibleGames.Add(movedGame);
-            //    }
-            //}
 
             return possibleGames;
         }
 
-        public void ParseMapFromMap(List<List<TileType>> map)
+        private void ApplyTargetParingIndices(int[]? targetPairingIndices)
         {
-            Map = Utils.DuplicateMap(map);
-            Height = map.Count;
-            Width = map[0].Count;
-
-            PlayerRow = -1;
-            PlayerCol = -1;
-            int NumBoxes = 0, NumHoles = 0;
-
-            _BoxLocations = new();
-            _HoleLocations = new();
-
-            for (int h = 0; h < Height; h++)
+            TargetPairingIndices = targetPairingIndices;
+            if (TargetPairingIndices is not null)
             {
-                for (int w = 0; w < Width; w++)
-                {
-                    if ((map[h][w] & TileType.Player) > 0)
-                    {
-                        PlayerCol = w;
-                        PlayerRow = h;
-                    }
-                    if ((map[h][w] & TileType.Box) > 0)
-                    {
-                        NumBoxes++;
-                        _BoxLocations.Add(new(h, w));
-                    }
-                    if ((map[h][w] & TileType.Hole) > 0)
-                    {
-                        NumHoles++;
-                        _HoleLocations.Add(new(h, w));
-                    }
-                }
+                if (NumHoles != TargetPairingIndices.Length) throw new Exception($"The should include 1, ..., {NumHoles} only!");
+                _StoneLocations = TargetPairingIndices.Select(i => _StoneLocations[i]).ToList();
             }
         }
 
-        public TileType CharDigitToTileType(char c) => (TileType)(int)Math.Pow(2, (c - '0'));
+        public static TileType CharDigitToTileType(char c) => (TileType)(int)Math.Pow(2, (c - '0'));
 
-        public void ParseMapFromStrings(string[]? mapData)
+        public void ParseMapFromStrings(string[]? mapData, int[]?targetPairingIndices)
         {
             if (mapData is null) return;
             if (mapData.Length < 3) throw new Exception("There must be at least 3 rows in the map!");
@@ -193,10 +196,11 @@ namespace SokobanDotNet
 
             PlayerRow = -1;
             PlayerCol = -1;
-            int NumBoxes = 0, NumHoles = 0;
 
-            _BoxLocations = new();
+            _StoneLocations = new();
             _HoleLocations = new();
+
+            TargetPairingIndices = targetPairingIndices;
 
             for (int h = 0; h < Height; h++)
             {
@@ -213,16 +217,8 @@ namespace SokobanDotNet
                         PlayerCol = w;
                         PlayerRow = h;
                     }
-                    else if(tile == TileType.Box)
-                    {
-                        NumBoxes++;
-                        _BoxLocations.Add(new(h, w));
-                    }
-                    else if (tile == TileType.Hole)
-                    {
-                        NumHoles++;
-                        _HoleLocations.Add(new(h, w));
-                    }
+                    else if(tile == TileType.Stone) _StoneLocations.Add(new(h, w));
+                    else if (tile == TileType.Hole) _HoleLocations.Add(new(h, w));
                 }
             }
 
@@ -236,8 +232,8 @@ namespace SokobanDotNet
                 if ((CharDigitToTileType(mapData[0][w]) != TileType.Blocked) || CharDigitToTileType(mapData[Height-1][w]) != TileType.Blocked) throw new Exception("The Border must be blocked!");
             }
 
-            if (NumBoxes != NumHoles) throw new Exception($"There must be equal amount of box(es) and hole(s)!");
-            if (NumBoxes <= 0) throw new Exception($"There must be at least one box and a hole");
+            if (NumStones != NumHoles) throw new Exception($"There must be equal amount of stone(s) and hole(s)!");
+            if (NumStones <= 0) throw new Exception($"There must be at least one stone and a hole");
 
             Map = new();
 
@@ -250,8 +246,9 @@ namespace SokobanDotNet
 
             Map[PlayerRow][PlayerCol] |= TileType.Ground;
 
-            foreach (var location in BoxLocations) Map[location.Item1][location.Item2] |= TileType.Ground;
+            foreach (var location in StoneLocations) Map[location.Item1][location.Item2] |= TileType.Ground;
 
+            ApplyTargetParingIndices(targetPairingIndices);
             SetBackup(mapData);
         }
 
@@ -275,7 +272,7 @@ namespace SokobanDotNet
                         case TileType.Hole:
                             toString += "口";
                             break;
-                        case TileType.Box | TileType.Ground:
+                        case TileType.Stone | TileType.Ground:
                             toString += "ｏ";
                             break;
                         case TileType.Player | TileType.Ground:
@@ -284,7 +281,7 @@ namespace SokobanDotNet
                         case TileType.Player | TileType.Hole:
                             toString += "你";
                             break;
-                        case TileType.Box | TileType.Hole:
+                        case TileType.Stone | TileType.Hole:
                             toString += "回";
                             break;
                     }
@@ -299,7 +296,7 @@ namespace SokobanDotNet
         /// </summary>
         private void Reset()
         {
-            ParseMapFromStrings(_MapData);
+            ParseMapFromStrings(_MapData, TargetPairingIndices);
             Status = GameStatus.OnGoing;
             StepsCount = 0;
         }
@@ -321,21 +318,8 @@ namespace SokobanDotNet
         /// <returns></returns>
         public static bool IsOutSideGame(SokobanGame game, int row, int col) => (row < 0 || row >= game.Height || col < 0 || col >= game.Width);
 
-        private bool CanTransportToAndPush(Tuple<int, int> targetLocation, PlayerAction action)
-        {
-            if (IsOutside(targetLocation.Item1, targetLocation.Item2)) return false;
-            if ((Map[targetLocation.Item1][targetLocation.Item2] | (TileType.Box | TileType.Blocked)) > 0) return false;
-
-            var xyDelta = ActionToDeltas[action];
-            int boxTargetRow = targetLocation.Item1 + xyDelta.Item1;
-            int boxTargetCol = targetLocation.Item2 + xyDelta.Item2;
-
-
-            return false;
-        }
-
         /// <summary>
-        /// Plan a path for a Transported node, from the last position to current without moving the boxes.
+        /// Plan a path for a Transported node, from the last position to current without moving the stonees.
         /// </summary>
         /// <returns>Action for the path.</returns>
         public bool PlanPath()
@@ -344,7 +328,6 @@ namespace SokobanDotNet
             Tuple<int, int> from = new(ParentGame.PlayerRow, ParentGame.PlayerCol);
             Tuple<int, int> to = new(PlayerRow, PlayerCol);
 
-            // TODO: Implementation
             PriorityQueue<PlannerNode, int> pathSearchList = new();
             pathSearchList.Enqueue(new(from, PlayerAction.Undefined, null), Utils.ManhattanDistance(from, to));
 
@@ -355,9 +338,10 @@ namespace SokobanDotNet
                 if (head.Position.Item1 == to.Item1 && head.Position.Item2 == to.Item2)
                 {
                     LastPlayerActions = head.GetActionChain();
+                    StepsCount += LastPlayerActions.Count;
                     return true;
                 }
-                auxMap[from.Item1][from.Item2] = TileType.Blocked;
+                auxMap[head.Position.Item1][head.Position.Item2] = TileType.Blocked;
 
                 foreach (var action in new[] { PlayerAction.Up, PlayerAction.Down, PlayerAction.Left, PlayerAction.Right })
                 {
@@ -368,7 +352,8 @@ namespace SokobanDotNet
                     if (IsOutside(targetRow, targetCol)) continue;
                     if ((auxMap[targetRow][targetCol] & TileType.Unstepable) > 0) continue;
 
-                    pathSearchList.Enqueue(new(new(targetRow, targetCol), action, head), Utils.ManhattanDistance(new(targetRow, targetCol), to));
+                    PlannerNode nextNode = new(new(targetRow, targetCol), action, head);
+                    pathSearchList.Enqueue(nextNode, Utils.ManhattanDistance(new(targetRow, targetCol), to) + nextNode.StepsCount);
                     auxMap[targetRow][targetCol] = TileType.Blocked;
                 }
             }
@@ -376,8 +361,37 @@ namespace SokobanDotNet
             return false;
         }
 
+        public int PlanPathOnBareMap(Tuple<int, int> from, Tuple<int, int> to)
+        {
+            PriorityQueue<PlannerNode, int> pathSearchList = new();
+            pathSearchList.Enqueue(new(from, PlayerAction.Undefined, null), Utils.ManhattanDistance(from, to));
+
+            List<List<TileType>> auxMap = Utils.DuplicateMap(Map);
+            while (pathSearchList.Count > 0)
+            {
+                var head = pathSearchList.Dequeue();
+                if (head.Position.Item1 == to.Item1 && head.Position.Item2 == to.Item2) return head.GetActionChain().Count;
+
+                auxMap[head.Position.Item1][head.Position.Item2] = TileType.Blocked;
+
+                foreach (var action in new[] { PlayerAction.Up, PlayerAction.Down, PlayerAction.Left, PlayerAction.Right })
+                {
+                    var xyDelta = ActionToDeltas[action];
+                    int targetRow = head.Position.Item1 + xyDelta.Item1;
+                    int targetCol = head.Position.Item2 + xyDelta.Item2;
+
+                    if (IsOutside(targetRow, targetCol)) continue;
+                    if ((auxMap[targetRow][targetCol] & TileType.Blocked) > 0) continue;
+
+                    pathSearchList.Enqueue(new(new(targetRow, targetCol), action, head), Utils.ManhattanDistance(new(targetRow, targetCol), to));
+                    auxMap[targetRow][targetCol] = TileType.Blocked;
+                }
+            }
+            return int.MaxValue;
+        }
+
         /// <summary>
-        /// Move to a location next to a box, and attempt to push it.
+        /// Move to a location next to a stone, and attempt to push it.
         /// </summary>
         /// <param name="targetLocation">Target location</param>
         /// <param name="action">Target action</param>
@@ -391,7 +405,7 @@ namespace SokobanDotNet
 
             if (!PlanPath()) return null;
             
-            var game = Birth();
+            SokobanGame game = new(this);
             return (game.Move(action) & MoveResult.Success) > 0 ? game : null;
         }
 
@@ -413,28 +427,27 @@ namespace SokobanDotNet
             if (Map[targetRow][targetCol] == TileType.Blocked) return MoveResult.FailedMove;
 
             MoveResult result;
-
             
-            if ((Map[targetRow][targetCol] & TileType.Box) > 0)
+            if ((Map[targetRow][targetCol] & TileType.Stone) > 0)
             {
-                int boxTargetRow = targetRow + targetDeltaRow;
-                int boxTargetCol = targetCol + targetDeltaCol;
-                if (IsOutside(boxTargetRow, boxTargetCol)) return MoveResult.FailedPush;
-                if (((Map[boxTargetRow][boxTargetCol] & TileType.Blocked) | (Map[boxTargetRow][boxTargetCol] & TileType.Box)) > 0) return MoveResult.FailedMove;
+                int stoneTargetRow = targetRow + targetDeltaRow;
+                int stoneTargetCol = targetCol + targetDeltaCol;
+                if (IsOutside(stoneTargetRow, stoneTargetCol)) return MoveResult.FailedPush;
+                if (((Map[stoneTargetRow][stoneTargetCol] & TileType.Blocked) | (Map[stoneTargetRow][stoneTargetCol] & TileType.Stone)) > 0) return MoveResult.FailedMove;
 
                 int i;
-                for (i = 0; i < _BoxLocations.Count; i++)
+                for (i = 0; i < _StoneLocations.Count; i++)
                 {
-                    if ((_BoxLocations[i].Item1 == targetRow) && (_BoxLocations[i].Item2 == targetCol))
+                    if ((_StoneLocations[i].Item1 == targetRow) && (_StoneLocations[i].Item2 == targetCol))
                     {
-                        _BoxLocations[i] = new(boxTargetRow, boxTargetCol);
+                        _StoneLocations[i] = new(stoneTargetRow, stoneTargetCol);
                         break;
                     }
                 }
-                if (i == _BoxLocations.Count) throw new Exception("Fatal error!");
+                //if (i == _StoneLocations.Count) throw new Exception("Fatal error!");
 
-                Map[boxTargetRow][boxTargetCol] |= TileType.Box;
-                Map[targetRow][targetCol] &= ~TileType.Box;
+                Map[stoneTargetRow][stoneTargetCol] |= TileType.Stone;
+                Map[targetRow][targetCol] &= ~TileType.Stone;
                 Map[targetRow][targetCol] |= TileType.Player;
                 Map[PlayerRow][PlayerCol] &= ~TileType.Player;
                 PlayerRow = targetRow;
@@ -468,7 +481,14 @@ namespace SokobanDotNet
             return actionChain;
         }
 
-        private List<PlayerAction> Solve() => new GameSolver(this).SolveGame();
+        private Tuple<List<PlayerAction>, long>Solve()
+        {
+            GameSolver solver = new(this);
+            var actions = solver.SolveGame();
+            var timeUsed = solver.Watch.ElapsedMilliseconds;
+
+            return new(actions, timeUsed);
+        }
 
         /// <summary>
         /// Handle user key input.
@@ -483,31 +503,38 @@ namespace SokobanDotNet
                 case ConsoleKey.UpArrow:
                     action = PlayerAction.Up;
                     break;
+
                 case ConsoleKey.DownArrow:
                     action = PlayerAction.Down;
                     break;
+
                 case ConsoleKey.LeftArrow:
                     action = PlayerAction.Left;
                     break;
+
                 case ConsoleKey.RightArrow:
                     action = PlayerAction.Right;
                     break;
+
                 case ConsoleKey.R:
                     Reset();
                     return "Reset the game.";
+
                 case ConsoleKey.S:
                     Console.WriteLine("Searching for the solution...");
 
-                    var actionChain = Solve();
-                    if (actionChain.Count == 0) return "Found no solution.";
+                    var res = Solve();
 
-                    ShowResult(actionChain);
+                    if (res.Item1.Count == 0) return $"Found no solution. Used {res.Item2} ms";
+
+                    ShowResult(res);
                     Status = GameStatus.End;
-                    return "Found a solution with " + actionChain.Count.ToString() + " step(s).\n" +
-                          $"Actions: {Utils.ActionsToString(actionChain)}";
+                    return "";
+
                 case ConsoleKey.Q:
                     Status = GameStatus.End;
                     return "Quitted the game.";
+
                 default: return "";
             }
 
@@ -531,17 +558,24 @@ namespace SokobanDotNet
             return "";
         }
 
+        public bool CheckStoneIWin(int stoneI)
+        {
+            if (PairedTarget)
+            {
+                if (StoneLocations[stoneI].Item1 != HoleLocations[stoneI].Item1) return false;
+                if (StoneLocations[stoneI].Item2 != HoleLocations[stoneI].Item2) return false;
+                return true;
+            }
+            else return Map[StoneLocations[stoneI].Item1][StoneLocations[stoneI].Item2] == (TileType.Stone | TileType.Hole);
+        }
+
         /// <summary>
         /// Check if a game hits the goal.
         /// </summary>
         /// <returns></returns>
         public bool CheckWin()
         {
-            // TODO: Paired box-hole check
-            foreach(var location in HoleLocations)
-            {
-                if (Map[location.Item1][location.Item2] != (TileType.Box | TileType.Hole)) return false;
-            }
+            for (int i = 0; i < StoneLocations.Count; i++) if (!CheckStoneIWin(i)) return false;
             return true;
         }
 
@@ -551,26 +585,31 @@ namespace SokobanDotNet
         /// Should trade-off between computation efficiency and trimming amout.
         /// </summary>
         /// <returns>Whether the game is definitely stuck.</returns>
-        private bool HasStuck()
+        public bool HasStuck()
         {
-            // In a valid map, the box will not be on the boarder, so no boarder check is needed.
-            foreach (var location in _BoxLocations)
+            // In a valid map, the stone will not be on the boarder, so no boarder check is needed.
+            for (int i = 0; i<StoneLocations.Count; i++)
             {
-                if (Map[location.Item1][location.Item2] == (TileType.Hole | TileType.Box)) continue;
-                if (((Map[location.Item1    ][location.Item2 + 1] & TileType.Blocked) > 0) && ((Map[location.Item1 + 1][location.Item2    ] & TileType.Blocked) > 0)) return true;
-                if (((Map[location.Item1 + 1][location.Item2    ] & TileType.Blocked) > 0) && ((Map[location.Item1    ][location.Item2 - 1] & TileType.Blocked) > 0)) return true;
-                if (((Map[location.Item1    ][location.Item2 - 1] & TileType.Blocked) > 0) && ((Map[location.Item1 - 1][location.Item2    ] & TileType.Blocked) > 0)) return true;
-                if (((Map[location.Item1 - 1][location.Item2    ] & TileType.Blocked) > 0) && ((Map[location.Item1    ][location.Item2 + 1] & TileType.Blocked) > 0)) return true;
+                if (CheckStoneIWin(i)) return false;
+
+                var location = StoneLocations[i];
+                if (Map[location.Item1][location.Item2] == (TileType.Hole | TileType.Stone)) continue;
+                if (((Map[location.Item1][location.Item2 + 1] & TileType.Blocked) > 0) && ((Map[location.Item1 + 1][location.Item2] & TileType.Blocked) > 0)) return true;
+                if (((Map[location.Item1 + 1][location.Item2] & TileType.Blocked) > 0) && ((Map[location.Item1][location.Item2 - 1] & TileType.Blocked) > 0)) return true;
+                if (((Map[location.Item1][location.Item2 - 1] & TileType.Blocked) > 0) && ((Map[location.Item1 - 1][location.Item2] & TileType.Blocked) > 0)) return true;
+                if (((Map[location.Item1 - 1][location.Item2] & TileType.Blocked) > 0) && ((Map[location.Item1][location.Item2 + 1] & TileType.Blocked) > 0)) return true;
             }
             return false;
         }
 
-        /// <summary>
-        /// Demonstrate the searched solution.
-        /// </summary>
-        /// <param name="actions"></param>
-        public void ShowResult(List<PlayerAction> actions)
+/// <summary>
+/// Demonstrate the searched solution.
+/// </summary>
+/// <param name="actions"></param>
+public void ShowResult(Tuple<List<PlayerAction>, long> res)
         {
+            var actions = res.Item1;
+            var timeUsed = res.Item2;
             var actionString = Utils.ActionsToString(actions);
             for (int i = 0; i < actions.Count; i++)
             {
@@ -580,9 +619,9 @@ namespace SokobanDotNet
                 Console.WriteLine("Executed " + StepsCount.ToString() + " steps\n");
                 Console.WriteLine(ToString());
                 Console.WriteLine($"Showing solution with { i } / {actions.Count} steps.");
-                Console.WriteLine($"Actions: { actionString }");
+                Console.WriteLine($"Actions: { actionString }. Searching used {timeUsed} ms.");
 
-                Thread.Sleep(500);
+                Thread.Sleep(250);
             }
         }
 
@@ -596,7 +635,12 @@ namespace SokobanDotNet
             {
                 Console.Clear();
                 Console.WriteLine(Instruction);
+
+                //if (PairedTarget) Console.WriteLine(ToString());
+                //else { }
+
                 Console.WriteLine(ToString());
+
                 Console.WriteLine("Executed steps: " + StepsCount.ToString());
                 Console.WriteLine(returnedString);
                 if (Status == GameStatus.End) return;
@@ -606,14 +650,51 @@ namespace SokobanDotNet
             }
         }
 
-        // Shadow copy is not enough.
-        //public object Clone() => MemberwiseClone();
+        //public ConsoleColor[] ConsoleColors = (ConsoleColor[])Enum.GetValues(typeof(ConsoleColor));
+
+        // TODO: Fix bugs with Chinese characters indicing.
+        //public void PrintToConsoleWithColors()
+        //{
+        //    List<Tuple<int, int>> allLocs = new();
+        //    List<ConsoleColor> allColors = new();
+        //    for (int i = 0; i < NumHoles; i++)
+        //    {
+        //        allLocs.Add(StoneLocations[i]);
+        //        allLocs.Add(HoleLocations[i]);
+        //        allColors.Add(ConsoleColors[i]);
+        //        allColors.Add(ConsoleColors[i]);
+        //    }
+        //    Utils.WriteLineWithColoredChars(ToString(), )
+        //}
 
         /// <summary>
-        /// Parse the game map from strings.
+        /// Give birth to a child node. This is for generating search nodes.
         /// </summary>
         /// <param name="MapData"></param>
-        public SokobanGame(string[] MapData) => ParseMapFromStrings(MapData);
+        public SokobanGame(string[] MapData, int[]? targetPairingIndices) => ParseMapFromStrings(MapData, targetPairingIndices);
+
+        public SokobanGame(List<List<TileType>> map)
+        {
+            Map = Utils.DuplicateMap(map);
+            Height = map.Count;
+            Width = map[0].Count;
+
+            _HoleLocations = new();
+            _StoneLocations = new();
+
+            for (int i = 0; i < Height; i++)
+            {
+                for (int j = 0; j < Width; j++)
+                {
+                    if (map[i][j] == (TileType.Ground | TileType.Stone)) _StoneLocations.Add(new(i, j));
+                    if (map[i][j] == (TileType.Ground | TileType.Player)) { PlayerRow = i; PlayerCol = j; }
+                    if (map[i][j] == (TileType.Hole)) _HoleLocations.Add(new(i, j));
+                }
+            }
+
+            ParentGame = null;
+            StepsCount = 0;
+        }
 
         /// <summary>
         /// Build a child game.
@@ -621,21 +702,19 @@ namespace SokobanDotNet
         /// <param name="game"></param>
         public SokobanGame(SokobanGame game)
         {
-            ParseMapFromMap(game.Map);
+            //ParseMapFromMap(game.Map, game.TargetPairingIndices);
+            Map = Utils.DuplicateMap(game.Map);
+            Height = game.Height;
+            Width = game.Width;
+            PlayerRow = game.PlayerRow;
+            PlayerCol = game.PlayerCol;
+
+            TargetPairingIndices = game.TargetPairingIndices;
+            _HoleLocations = Utils.DuplicateLocations(game.HoleLocations);
+            _StoneLocations = Utils.DuplicateLocations(game._StoneLocations);
+
+            ParentGame = game;
             StepsCount = game.StepsCount;
-            LastPlayerActions = game.LastPlayerActions;
         }
-
-        /// <summary>
-        /// Give birth to a child node. This is for generating search nodes.
-        /// </summary>
-        /// <returns>A copied child SokobanGame instance with ParentGame pointing to </returns>
-        public SokobanGame Birth()
-        {
-            SokobanGame child = new(this);
-            child.ParentGame = this;
-            return child;
-        }
-
     }
 }
