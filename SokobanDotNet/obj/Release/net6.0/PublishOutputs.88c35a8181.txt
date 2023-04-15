@@ -1,0 +1,5 @@
+E:\Dev\SokobanDotNet\SokobanDotNet\bin\Release\net6.0\publish\SokobanDotNet.exe
+E:\Dev\SokobanDotNet\SokobanDotNet\bin\Release\net6.0\publish\SokobanDotNet.dll
+E:\Dev\SokobanDotNet\SokobanDotNet\bin\Release\net6.0\publish\SokobanDotNet.deps.json
+E:\Dev\SokobanDotNet\SokobanDotNet\bin\Release\net6.0\publish\SokobanDotNet.runtimeconfig.json
+E:\Dev\SokobanDotNet\SokobanDotNet\bin\Release\net6.0\publish\SokobanDotNet.pdb

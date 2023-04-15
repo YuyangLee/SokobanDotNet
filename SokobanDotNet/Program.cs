@@ -1,7 +1,7 @@
 ﻿using SokobanDotNet;
 
-//try
-//{
+try
+{
     Console.WriteLine("==== LOAD MAP DATA FROM FILE ====");
     Console.Write("Load from file: ");
     string? gameFilePath = Console.ReadLine();
@@ -57,8 +57,8 @@
 
     Console.WriteLine("Press any key to exit...");
     Console.ReadLine();
-//}
-//catch (Exception ex)
-//{
-//    Console.WriteLine(ex.Message);
-//}
+}
+catch (Exception ex)
+{
+    Console.WriteLine(ex.Message);
+}
